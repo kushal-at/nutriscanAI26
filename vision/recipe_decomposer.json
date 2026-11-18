@@ -1,0 +1,45 @@
+{
+  "curry_meat": {
+    "match_keywords": ["chicken curry", "mutton curry", "beef curry", "lamb curry", "fish curry", "chicken tikka masala", "butter chicken", "pork curry", "meat curry"],
+    "components": [
+      {"name": "Cooked Meat", "volume_fraction": 0.45, "density_category": "cooked_meat"},
+      {"name": "Gravy Sauce", "volume_fraction": 0.55, "density_category": "rich_sauce"}
+    ]
+  },
+  "curry_paneer": {
+    "match_keywords": ["paneer butter masala", "shahi paneer", "palak paneer", "kadai paneer", "paneer curry", "matar paneer", "paneer tikka masala"],
+    "components": [
+      {"name": "Paneer", "volume_fraction": 0.40, "density_category": "dairy"},
+      {"name": "Gravy Sauce", "volume_fraction": 0.60, "density_category": "rich_sauce"}
+    ]
+  },
+  "curry_legume": {
+    "match_keywords": ["chana masala", "chole", "rajma", "dal makhani", "sambar", "dal tadka", "lentil dal", "dal fry", "moong dal"],
+    "components": [
+      {"name": "Cooked Legumes", "volume_fraction": 0.50, "density_category": "legume_or_curry"},
+      {"name": "Gravy Sauce", "volume_fraction": 0.50, "density_category": "sauce"}
+    ]
+  },
+  "biryani": {
+    "match_keywords": ["chicken biryani", "mutton biryani", "lamb biryani", "beef biryani", "dum biryani", "biryani"],
+    "components": [
+      {"name": "Cooked Rice", "volume_fraction": 0.70, "density_category": "cooked_grain"},
+      {"name": "Meat Pieces", "volume_fraction": 0.30, "density_category": "cooked_meat"}
+    ]
+  },
+  "pulao_veg": {
+    "match_keywords": ["veg biryani", "vegetable biryani", "veg pulao", "vegetable pulao", "fried rice"],
+    "components": [
+      {"name": "Cooked Rice", "volume_fraction": 0.75, "density_category": "cooked_grain"},
+      {"name": "Mixed Vegetables", "volume_fraction": 0.25, "density_category": "vegetable"}
+    ]
+  },
+  "burrito_bowl": {
+    "match_keywords": ["burrito bowl", "grain bowl", "poke bowl", "chipotle bowl"],
+    "components": [
+      {"name": "Grains", "volume_fraction": 0.40, "density_category": "cooked_grain"},
+      {"name": "Protein", "volume_fraction": 0.35, "density_category": "cooked_meat"},
+      {"name": "Vegetables & Dressing", "volume_fraction": 0.25, "density_category": "vegetable"}
+    ]
+  }
+}

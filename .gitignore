@@ -1,0 +1,28 @@
+# Python environments and compiled bytecode
+.venv/
+.venv_*/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local configuration, temporary artifacts, and logs
+.env
+logs/
+*.log
+*.bak
+*.tmp
+catboost_info/
+scratch/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Non-project directories (explicitly excluded)
+Temp/
+uiRedesign/
+.agents/
+skills/
