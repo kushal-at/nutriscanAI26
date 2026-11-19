@@ -57,7 +57,7 @@ if (-not (Test-Path -LiteralPath $CatBoostModel)) {
     exit 1
 }
 
-# 3. Check Ollama Connectivity (Port 11434)
+# 3. Check & Auto-Start Ollama Service (Port 11434)
 Write-Host "`n[1/3] Checking Ollama Service..." -ForegroundColor Yellow
 $OllamaRunning = $false
 try {
@@ -72,7 +72,26 @@ try {
             Write-Host "     Run: 'ollama pull qwen3-vl:2b' for VLM portion estimations." -ForegroundColor Yellow
         }
     }
-} catch {
+} catch {}
+
+if (-not $OllamaRunning) {
+    Write-Host "  -> Ollama is not active. Attempting to start local Ollama server..." -ForegroundColor Cyan
+    $ollamaCmd = Get-Command "ollama" -ErrorAction SilentlyContinue
+    $ollamaBin = if ($ollamaCmd) { $ollamaCmd.Source } else { "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" }
+    if ($ollamaBin -and (Test-Path -LiteralPath $ollamaBin)) {
+        Start-Process -FilePath $ollamaBin -ArgumentList "serve" -WindowStyle Hidden
+        Start-Sleep -Seconds 3
+        try {
+            $ollamaCheck = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5 -ErrorAction SilentlyContinue
+            if ($ollamaCheck -and $ollamaCheck.models) {
+                Write-Host "  -> Local Ollama server started successfully with models loaded!" -ForegroundColor Green
+                $OllamaRunning = $true
+            }
+        } catch {}
+    }
+}
+
+if (-not $OllamaRunning) {
     Write-Host "  -> Ollama not detected at http://127.0.0.1:11434." -ForegroundColor Yellow
     Write-Host "     Vision service will use DeepLabV3+ geometric segmentation fallback." -ForegroundColor DarkGray
 }

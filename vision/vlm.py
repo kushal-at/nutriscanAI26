@@ -421,9 +421,10 @@ async def query_qwen_vlm(
     """Execute optimized CPU VLM chat inference via Ollama with focal crops, priors, and JSON Schema."""
     has_side = bool(side_thumb_b64 and side_thumb_b64 != top_thumb_b64)
     images = [top_thumb_b64]
-    num_focal = len(focal_crops_b64) if focal_crops_b64 else 0
-    if focal_crops_b64:
-        images.extend(focal_crops_b64)
+    crops_to_send = (focal_crops_b64[:2] if focal_crops_b64 else [])
+    num_focal = len(crops_to_send)
+    if crops_to_send:
+        images.extend(crops_to_send)
     if has_side:
         images.append(side_thumb_b64)
 
@@ -474,16 +475,18 @@ async def query_qwen_vlm(
 
     messages = [
         {"role": "user", "content": prompt, "images": images},
+        {"role": "assistant", "content": "<think>\n</think>\n"},
     ]
 
     payload = {
         "model": qwen_model,
         "messages": messages,
         "stream": False,
+        "think": False,
         "format": VLM_OUTPUT_SCHEMA,
         "options": {
             "temperature": 0,
-            "num_predict": 768,
+            "num_predict": 1536,
             "num_ctx": 4096,
             "num_thread": num_threads,
         },
@@ -506,7 +509,17 @@ async def query_qwen_vlm(
     message = ollama_result.get("message", {})
     content = message.get("content", "").strip()
 
-    # STRICT RULE: Never interpret internal thinking text as a food-identification response!
+    # If thinking tags are embedded in content, strip them
+    if "<think>" in content and "</think>" in content:
+        content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+
+    # If content was returned in message['thinking'], recover it
+    if not content and message.get("thinking"):
+        th = message["thinking"]
+        if "{" in th and "}" in th:
+            content = th[th.find("{"):th.rfind("}")+1].strip()
+
+    # STRICT RULE: Never interpret empty content as a food-identification response!
     if not content:
         logger.warning(
             "Qwen returned empty content (thinking suppressed or generation aborted). done_reason=%s, thinking_len=%d",
