@@ -369,10 +369,51 @@ async def analyze_dual(
         "scale_reference": vision_data.get("scale_reference", {}),
         "nutrition": nutr.nutrition,
         "recipe_totals": nutr.recipe_totals,
+        "review_required": vision_data.get("review_required", False),
+        "review_reasons": vision_data.get("review_reasons", []),
+        "recognized_visible_foods": vision_data.get("recognized_visible_foods", []),
         "limitations": vision_data.get("limitations", []),
         "segmentation": vision_data.get("segmentation", {}),
         "spatial_clusters": vision_data.get("spatial_clusters", []),
+        "vlm_provider": vision_data.get("vlm_provider", "Gemini AI"),
+        "vlm_key_used": vision_data.get("vlm_key_used", "N/A"),
+        "image_processing": vision_data.get("image_processing", {}),
+        "side_view_observation": vision_data.get("side_view_observation", ""),
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# 3. GEMINI KEY ROUTER REVERSE PROXY (PORT 8000 -> PORT 8001)
+# ─────────────────────────────────────────────────────────────
+@app.api_route(
+    "/gemini/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE"],
+    tags=["Gemini Router"],
+    summary="Proxy Gemini API key management to Vision Service",
+)
+async def proxy_gemini_endpoint(path: str, request: Request):
+    """Proxy Gemini Key Router management requests to the Vision Service on port 8001."""
+    vision_base = os.getenv("VISION_HOST", "http://127.0.0.1:8001").rstrip("/")
+    url = f"{vision_base}/gemini/{path}"
+    client = getattr(app.state, "http_client", None)
+
+    body = await request.body()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in {"host", "content-length"}}
+
+    try:
+        if client is not None and not client.is_closed:
+            resp = await client.request(request.method, url, content=body, headers=headers, timeout=25.0)
+        else:
+            async with httpx.AsyncClient(timeout=25.0) as temp_client:
+                resp = await temp_client.request(request.method, url, content=body, headers=headers)
+        return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot connect to Vision Service on port 8001. Ensure Vision service is running."
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini proxy error: {exc}")
 
 
 # ─────────────────────────────────────────────────────────────

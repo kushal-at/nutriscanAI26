@@ -1608,6 +1608,20 @@
         showToast(`Removed "${targetName}" from meal`);
     }
 
+    function renameIngredient(name, nextName) {
+        const targetName = (window.currentIngredients && window.currentIngredients[name] !== undefined)
+            ? name
+            : decodeURIComponent(name || "");
+        const cleanName = (nextName || "").trim();
+        if (!cleanName || !window.currentIngredients || !window.currentIngredients[targetName]) return;
+        if (cleanName === targetName) return;
+        const weight = window.currentIngredients[targetName];
+        delete window.currentIngredients[targetName];
+        window.currentIngredients[cleanName] = (window.currentIngredients[cleanName] || 0) + weight;
+        recalculateNutrition();
+        showToast(`Renamed "${targetName}" to "${cleanName}"`);
+    }
+
     function addCustomIngredient() {
         const nameInput = document.getElementById("newIngrName");
         const weightInput = document.getElementById("newIngrWeight");
@@ -1636,6 +1650,7 @@
     window.adjustWeight = adjustWeight;
     window.updateWeightManual = updateWeightManual;
     window.removeIngredient = removeIngredient;
+    window.renameIngredient = renameIngredient;
     window.addCustomIngredient = addCustomIngredient;
     window.recalculateNutrition = recalculateNutrition;
 
@@ -1881,6 +1896,7 @@
 
         // 3. Interactive ingredient tray
         let ingrRowsHtml = "";
+        const reviewRequired = Boolean(data.review_required);
         for (const [name, weight] of Object.entries(window.currentIngredients)) {
             const cleanName = escapeHTML(name);
             const encName = encodeURIComponent(name);
@@ -1889,7 +1905,9 @@
                 <div class="ingr-chip-row">
                     <div class="ingr-name-col">
                         <span class="food-emoji">${emoji}</span>
-                        <span>${cleanName}</span>
+                        ${reviewRequired
+                            ? `<input type="text" class="input-add-name" value="${cleanName}" aria-label="Food name" onchange="window.renameIngredient(decodeURIComponent('${encName}'), this.value)">`
+                            : `<span>${cleanName}</span>`}
                     </div>
                     <div class="ingr-stepper-col">
                         <button type="button" class="btn-step" onclick="window.adjustWeight(decodeURIComponent('${encName}'), -10)" title="Subtract 10g">−</button>
@@ -1902,12 +1920,18 @@
             `;
         }
 
+        const reviewNotice = reviewRequired ? `
+            <div style="margin: 0 0 14px; padding: 12px 14px; border: 1px solid #f59e0b; border-radius: 10px; background: rgba(245, 158, 11, .09); color: var(--ink); font-size: 13px; line-height: 1.45;">
+                <strong>Review detected foods before logging.</strong> Rename, remove, or add foods below, then recalculate nutrition.
+                ${(data.review_reasons || []).length ? `<div style="margin-top: 5px; color: var(--muted);">${escapeHTML(data.review_reasons.join(" "))}</div>` : ''}
+            </div>` : '';
         const interactiveTrayHtml = `
             <div class="interactive-tray-container">
                 <div class="tray-title-row">
                     <h4>Meal components</h4>
-                    <span class="tray-subtext">Adjust portion weights before recalculating</span>
+                    <span class="tray-subtext">${reviewRequired ? 'Confirm foods and portions before recalculating' : 'Adjust portion weights before recalculating'}</span>
                 </div>
+                ${reviewNotice}
                 <div class="ingredient-chips-list">
                     ${ingrRowsHtml || '<p style="color:var(--muted);font-size:13px;padding:8px 0">No food items listed.</p>'}
                 </div>
@@ -1995,11 +2019,25 @@
             </div>
         `;
 
+        const vlmProvider = data.vlm_provider || (data.image_processing && data.image_processing.vlm_provider);
+        const vlmKeyUsed = data.vlm_key_used || (data.image_processing && data.image_processing.vlm_key_used);
+        const providerBadge = vlmProvider ? `
+            <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                <i data-lucide="sparkles" style="width: 12px; height: 12px;"></i>
+                <span>${escapeHTML(vlmProvider)}${vlmKeyUsed && vlmKeyUsed !== 'N/A' ? ` (${escapeHTML(vlmKeyUsed)})` : ''}</span>
+            </span>
+        ` : '';
+
         // Combine into DOM
         resultDiv.innerHTML = `
-            <div class="result-card-header">
-                <h3>${dishName}</h3>
-                <span class="scale-badge">${plateText}</span>
+            <div class="result-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <h3 style="margin: 0 0 4px;">${dishName}</h3>
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span class="scale-badge">${plateText}</span>
+                        ${providerBadge}
+                    </div>
+                </div>
             </div>
             ${totalsHtml}
             ${macroSplitHtml}
@@ -3497,6 +3535,245 @@
     };
 
     // -------------------------------------------------------------
+    // GEMINI AI MULTI-KEY ROUND-ROBIN ROUTER CONTROLLERS
+    // -------------------------------------------------------------
+    async function checkGeminiStatus() {
+        const descEl = document.getElementById('profile-gemini-desc');
+        if (!descEl) return;
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const resp = await fetch(keysUrl, { method: 'GET' });
+            if (resp.ok) {
+                const data = await resp.json();
+                const total = data.total_keys || 0;
+                const active = data.active_keys || 0;
+                const model = data.model || 'gemini-2.5-flash';
+                if (total === 0) {
+                    descEl.textContent = "No keys configured — click Manage Keys to add";
+                    descEl.style.color = "var(--muted)";
+                } else {
+                    descEl.textContent = `Active: ${active}/${total} key(s) (${model}) · Dynamic 429 failover`;
+                    descEl.style.color = active > 0 ? "var(--forest, #059669)" : "var(--amber, #d97706)";
+                }
+            } else {
+                descEl.textContent = "Vision service offline (port 8001)";
+            }
+        } catch (e) {
+            descEl.textContent = "Key router standby (configure keys)";
+        }
+    }
+    window.checkGeminiStatus = checkGeminiStatus;
+
+    window.nutriScanOpenGeminiModal = function () {
+        openModal('modal-gemini-config');
+        window.loadGeminiKeysStatus();
+    };
+
+    window.loadGeminiKeysStatus = async function () {
+        const listEl = document.getElementById('gemini-keys-list');
+        const counterEl = document.getElementById('gemini-pool-counter');
+        const modelSelect = document.getElementById('cfg-gemini-model');
+        const feedbackEl = document.getElementById('gemini-test-feedback');
+        if (feedbackEl) feedbackEl.style.display = 'none';
+
+        if (listEl) {
+            listEl.innerHTML = '<div class="tiny" style="color: var(--muted); text-align: center; padding: 10px 0;">Refreshing key pool...</div>';
+        }
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const resp = await fetch(keysUrl);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+
+            const keys = data.keys || [];
+            const total = data.total_keys || keys.length;
+            const active = data.active_keys || 0;
+
+            if (counterEl) {
+                counterEl.textContent = `${active} Active / ${total} Total`;
+                counterEl.className = active > 0 ? "badge badge-success" : "badge badge-warning";
+            }
+
+            if (modelSelect && data.model) {
+                modelSelect.value = data.model;
+            }
+
+            if (listEl) {
+                if (keys.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="tiny" style="color: var(--muted); text-align: center; padding: 12px 0;">
+                            No Gemini keys currently registered in pool.<br>Paste your keys below to enable Gemini Vision.
+                        </div>
+                    `;
+                } else {
+                    listEl.innerHTML = keys.map((k) => {
+                        const isCooldown = k.status === 'cooldown';
+                        const isInvalid = k.status === 'invalid';
+                        const statusColor = isInvalid ? '#ef4444' : (isCooldown ? '#f59e0b' : '#10b981');
+                        const statusLabel = isInvalid ? 'Invalid' : (isCooldown ? `Cooldown (${k.cooldown_remaining_sec}s)` : 'Active');
+
+                        return `
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--paper-card, #fff); border: 1px solid var(--border-color, #e5e7eb); border-radius: 6px; font-size: 12px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
+                                    <code style="font-weight: 700; font-size: 12px;">${escapeHTML(k.masked_key)}</code>
+                                    <span style="font-size: 10px; color: ${statusColor}; font-weight: 600;">[${statusLabel}]</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span class="tiny" style="color: var(--muted);" title="Success / Failures">
+                                        ✓ ${k.success_count || 0} · ✗ ${k.failure_count || 0}
+                                    </span>
+                                    <button type="button" class="iconbtn" onclick="window.handleDeleteGeminiKey('${k.masked_key}')" title="Remove this key" style="color: #ef4444; width: 22px; height: 22px;">
+                                        <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    renderLucide();
+                }
+            }
+
+            checkGeminiStatus();
+        } catch (err) {
+            if (listEl) {
+                listEl.innerHTML = `
+                    <div class="tiny" style="color: #ef4444; text-align: center; padding: 12px 0;">
+                        Could not load Gemini keys (${escapeHTML(err.message)}). Ensure Vision Service (8001) is running.
+                    </div>
+                `;
+            }
+        }
+    };
+
+    window.handleSaveGeminiKeys = async function () {
+        const inputEl = document.getElementById('cfg-gemini-new-key');
+        if (!inputEl) return;
+        const text = inputEl.value.trim();
+        if (!text) {
+            showToast("Please enter at least one Gemini API key", true);
+            return;
+        }
+
+        const rawKeys = text.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+        if (rawKeys.length === 0) {
+            showToast("No valid keys found in input", true);
+            return;
+        }
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const resp = await fetch(keysUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keys: rawKeys, action: "add" })
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+
+            inputEl.value = "";
+            showToast(`✦ Added ${rawKeys.length} key(s) to Gemini Round-Robin pool!`);
+            window.loadGeminiKeysStatus();
+        } catch (err) {
+            showToast(`Failed to add keys: ${err.message}`, true);
+        }
+    };
+
+    window.handleDeleteGeminiKey = async function (identifier) {
+        if (!confirm(`Remove key ${identifier} from the router pool?`)) return;
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const delUrl = isPort8000 ? `/gemini/keys/${encodeURIComponent(identifier)}` : `${BACKEND_BASE_URL}/gemini/keys/${encodeURIComponent(identifier)}`;
+            const resp = await fetch(delUrl, { method: "DELETE" });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+
+            showToast(`Removed key ${identifier}`);
+            window.loadGeminiKeysStatus();
+        } catch (err) {
+            showToast(`Could not remove key: ${err.message}`, true);
+        }
+    };
+
+    window.handleChangeGeminiModel = async function () {
+        const modelSelect = document.getElementById('cfg-gemini-model');
+        if (!modelSelect) return;
+        const model = modelSelect.value;
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const url = isPort8000 ? "/gemini/model" : `${BACKEND_BASE_URL}/gemini/model`;
+            const resp = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: model })
+            });
+            if (resp.ok) {
+                showToast(`Gemini model switched to ${model}`);
+                checkGeminiStatus();
+            }
+        } catch (e) {
+            console.warn("Could not switch Gemini model:", e);
+        }
+    };
+
+    window.handleTestGeminiKeys = async function () {
+        const feedbackEl = document.getElementById('gemini-test-feedback');
+        const testBtn = document.getElementById('btn-gemini-test');
+
+        if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.style.color = 'var(--muted)';
+            feedbackEl.innerHTML = '<span class="spin-icon">⏳</span> Pinging Google Gemini API via Round-Robin Router...';
+        }
+        if (testBtn) testBtn.disabled = true;
+
+        const startTime = performance.now();
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const testUrl = isPort8000 ? "/gemini/test" : `${BACKEND_BASE_URL}/gemini/test`;
+            const resp = await fetch(testUrl, { method: "POST" });
+            const data = await resp.json();
+            const elapsed = Math.round(performance.now() - startTime);
+
+            if (resp.ok && data.status === "ok") {
+                if (feedbackEl) {
+                    feedbackEl.style.color = '#10b981';
+                    feedbackEl.innerHTML = `✓ <b>Success:</b> Responded in <b>${elapsed}ms</b> using key <code>${escapeHTML(data.key_used || '')}</code> (${escapeHTML(data.model || '')})`;
+                }
+                showToast(`✦ Gemini connected in ${elapsed}ms!`);
+            } else {
+                if (feedbackEl) {
+                    feedbackEl.style.color = '#ef4444';
+                    feedbackEl.innerHTML = `✗ <b>Error:</b> ${escapeHTML(data.message || 'Test failed')}`;
+                }
+                showToast(`Gemini test failed: ${data.message || 'Error'}`, true);
+            }
+            window.loadGeminiKeysStatus();
+        } catch (err) {
+            if (feedbackEl) {
+                feedbackEl.style.color = '#ef4444';
+                feedbackEl.innerHTML = `✗ <b>Connection Error:</b> ${escapeHTML(err.message)}`;
+            }
+            showToast(`Gemini test failed: ${err.message}`, true);
+        } finally {
+            if (testBtn) testBtn.disabled = false;
+        }
+    };
+
+    // -------------------------------------------------------------
     // CENTRALIZED LOGIN STATE CHECKER (Always checks Cloud & Local)
     // -------------------------------------------------------------
     window.checkLoginState = function () {
@@ -3640,9 +3917,13 @@
 
         // Check backend server status
         checkBackendStatus();
+        checkGeminiStatus();
 
         // Periodic background ping to backend (every 30 seconds)
-        setInterval(checkBackendStatus, 30000);
+        setInterval(() => {
+            checkBackendStatus();
+            checkGeminiStatus();
+        }, 30000);
     });
 
 })();

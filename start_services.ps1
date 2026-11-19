@@ -57,43 +57,31 @@ if (-not (Test-Path -LiteralPath $CatBoostModel)) {
     exit 1
 }
 
-# 3. Check & Auto-Start Ollama Service (Port 11434)
-Write-Host "`n[1/3] Checking Ollama Service..." -ForegroundColor Yellow
-$OllamaRunning = $false
-try {
-    $ollamaCheck = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 3 -ErrorAction SilentlyContinue
-    if ($ollamaCheck -and $ollamaCheck.models) {
-        $modelNames = $ollamaCheck.models | ForEach-Object { $_.name }
-        if ($modelNames -contains "qwen3-vl:2b") {
-            Write-Host "  -> Ollama is online with qwen3-vl:2b ready." -ForegroundColor Green
-            $OllamaRunning = $true
-        } else {
-            Write-Host "  -> Ollama is running, but 'qwen3-vl:2b' was not found in: $($modelNames -join ', ')." -ForegroundColor Yellow
-            Write-Host "     Run: 'ollama pull qwen3-vl:2b' for VLM portion estimations." -ForegroundColor Yellow
+# 3. Check Gemini API Key Pool Status
+Write-Host "`n[1/3] Checking Gemini AI Key Router..." -ForegroundColor Yellow
+$GeminiKeysFile = Join-Path $VisionProjectRoot "gemini_keys.json"
+$GeminiKeyCount = 0
+if (Test-Path -LiteralPath $GeminiKeysFile) {
+    try {
+        $keysData = Get-Content -LiteralPath $GeminiKeysFile -Raw | ConvertFrom-Json
+        if ($keysData.keys) {
+            $GeminiKeyCount = $keysData.keys.Count
         }
-    }
-} catch {}
-
-if (-not $OllamaRunning) {
-    Write-Host "  -> Ollama is not active. Attempting to start local Ollama server..." -ForegroundColor Cyan
-    $ollamaCmd = Get-Command "ollama" -ErrorAction SilentlyContinue
-    $ollamaBin = if ($ollamaCmd) { $ollamaCmd.Source } else { "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" }
-    if ($ollamaBin -and (Test-Path -LiteralPath $ollamaBin)) {
-        Start-Process -FilePath $ollamaBin -ArgumentList "serve" -WindowStyle Hidden
-        Start-Sleep -Seconds 3
-        try {
-            $ollamaCheck = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -Method Get -TimeoutSec 5 -ErrorAction SilentlyContinue
-            if ($ollamaCheck -and $ollamaCheck.models) {
-                Write-Host "  -> Local Ollama server started successfully with models loaded!" -ForegroundColor Green
-                $OllamaRunning = $true
-            }
-        } catch {}
-    }
+    } catch {}
+}
+if ($env:GEMINI_API_KEYS) {
+    $envKeys = $env:GEMINI_API_KEYS -split "[,;\r\n]+" | Where-Object { $_.Trim() -ne "" }
+    $GeminiKeyCount = [Math]::Max($GeminiKeyCount, $envKeys.Count)
+} elseif ($env:GEMINI_API_KEY) {
+    $GeminiKeyCount = [Math]::Max($GeminiKeyCount, 1)
 }
 
-if (-not $OllamaRunning) {
-    Write-Host "  -> Ollama not detected at http://127.0.0.1:11434." -ForegroundColor Yellow
-    Write-Host "     Vision service will use DeepLabV3+ geometric segmentation fallback." -ForegroundColor DarkGray
+if ($GeminiKeyCount -gt 0) {
+    Write-Host "  -> Gemini Key Router ready ($GeminiKeyCount key(s) registered with round-robin rotation & 429 failover)." -ForegroundColor Green
+} else {
+    Write-Host "  -> No Gemini API keys found in env or gemini_keys.json." -ForegroundColor Yellow
+    Write-Host "     Add keys via Web UI (Profile -> Settings -> Gemini AI Key Router) or set GEMINI_API_KEYS." -ForegroundColor DarkGray
+    Write-Host "     Vision service will use DeepLabV3+ geometric segmentation fallback until keys are added." -ForegroundColor DarkGray
 }
 
 # 4. Check & safely release ports 8000 and 8001

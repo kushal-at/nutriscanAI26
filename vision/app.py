@@ -15,6 +15,7 @@ import io
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -57,8 +58,15 @@ try:
         get_vlm_thumbnail_b64,
         extract_focal_crops,
         format_segmentation_priors,
+        query_gemini_recognition,
+        query_gemini_vlm,
+        query_qwen_recognition,
         parse_component_response,
         query_qwen_vlm,
+    )
+    from vision.gemini_router import (
+        gemini_router,
+        GeminiAllKeysExhaustedError,
     )
 except ModuleNotFoundError:
     from segmentation import (
@@ -79,14 +87,24 @@ except ModuleNotFoundError:
         get_vlm_thumbnail_b64,
         extract_focal_crops,
         format_segmentation_priors,
+        query_gemini_recognition,
+        query_gemini_vlm,
+        query_qwen_recognition,
         parse_component_response,
         query_qwen_vlm,
+    )
+    from gemini_router import (
+        gemini_router,
+        GeminiAllKeysExhaustedError,
     )
 
 SEGMENTER_PATH = Path(os.getenv("FOODSEG_MODEL", ROOT / "models/FoodSeg103/best_model.pth"))
 LABELS_PATH = Path(os.getenv("FOODSEG_LABELS", ROOT / "models/FoodSeg103/labels_config.json"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen3-vl:2b")
+VISION_PROVIDER = os.getenv("VISION_PROVIDER", "gemini").strip().lower()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 QWEN_NUM_CTX = int(os.getenv("QWEN_NUM_CTX", "4096"))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(25 * 1024 * 1024)))  # 25 MB upload limit
 MAX_IMAGE_PIXELS = 50_000_000
@@ -94,11 +112,8 @@ CONFIDENCE = float(os.getenv("FOODSEG_CONFIDENCE", "0.25"))
 FOODSEG_TILE_SIZE = int(os.getenv("FOODSEG_TILE_SIZE", "512"))
 FOODSEG_TILE_OVERLAP = int(os.getenv("FOODSEG_TILE_OVERLAP", "64"))
 
-_ollama_endpoint = urlparse(OLLAMA_URL)
-if _ollama_endpoint.scheme not in {"http", "https"} or _ollama_endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}:
-    raise RuntimeError("Offline mode requires OLLAMA_URL to point to this computer (localhost)")
-if QWEN_MODEL.lower().endswith("-cloud"):
-    raise RuntimeError("Offline mode cannot use an Ollama cloud model; configure a locally installed model")
+if VISION_PROVIDER not in {"gemini", "qwen"}:
+    VISION_PROVIDER = "gemini"
 
 logger = logging.getLogger("foodvision")
 
@@ -109,21 +124,13 @@ DENSITY_TABLE = json.loads((ROOT / "food_density.json").read_text(encoding="utf-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI Lifespan: checks Ollama connectivity asynchronously without stalling startup."""
+    """FastAPI Lifespan: initializes models and Gemini Key Pool."""
     logger.info("Initializing Food Vision service (DeepLabV3+ & Planar Metrology)...")
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(2.5)) as client:
-            resp = await client.get(f"{OLLAMA_URL.rstrip('/')}/api/tags")
-            if resp.status_code == 200:
-                logger.info("Ollama service verified at %s (HTTP 200)", OLLAMA_URL)
-            else:
-                logger.warning("Ollama connectivity check returned status %s", resp.status_code)
-    except Exception as exc:
-        logger.info(
-            "Ollama service not reachable at %s (%s). Service operates with DeepLabV3+ fallback.",
-            OLLAMA_URL,
-            exc,
-        )
+    status = gemini_router.get_pool_status()
+    logger.info(
+        "Gemini Round-Robin Key Router online [Model=%s, Total Keys=%d, Active=%d]",
+        gemini_router.model, status["total_keys"], status["active_keys"]
+    )
     yield
     logger.info("Shutting down Food Vision service.")
 
@@ -237,8 +244,35 @@ def reconcile_clusters_with_vlm(
             cl["culinary_name"] = (cl.get("label") or cl.get("class") or "Food").title()
 
 
+def _food_name_matches(left: str, right: str) -> bool:
+    """Compare culinary labels without treating generic words as evidence of agreement."""
+    generic = {"food", "dish", "curry", "sauce", "chutney", "raita", "dal", "gravy", "and", "with"}
+    left_terms = {part for part in left.lower().replace("/", " ").split() if part not in generic}
+    right_terms = {part for part in right.lower().replace("/", " ").split() if part not in generic}
+    return bool(left_terms and right_terms and left_terms.intersection(right_terms)) or left.lower() == right.lower()
+
+
+def _review_reasons(recognition: dict[str, Any] | None, components: list[dict[str, Any]], vlm_failed: bool) -> list[str]:
+    if vlm_failed:
+        return ["Culinary recognition was unavailable; the fallback uses coarse visual categories."]
+    if not recognition:
+        return ["The recognition pass did not return a verified food list."]
+    visible = recognition.get("visible_foods", [])
+    names = [str(item.get("name", "")) for item in components]
+    reasons = []
+    if any(not any(_food_name_matches(name, expected) for expected in visible) for name in names):
+        reasons.append("The measured components did not fully match the independently recognized visible foods.")
+    if any(not any(_food_name_matches(expected, name) for name in names) for expected in visible):
+        reasons.append("One or more visible foods could not be assigned a reliable portion estimate.")
+    normalized = [name.lower().strip() for name in names]
+    if len(normalized) != len(set(normalized)):
+        reasons.append("Duplicate food components were detected.")
+    return reasons
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    gemini_stat = gemini_router.get_pool_status()
     return {
         "status": "ok",
         "segmenter": "loaded",
@@ -250,13 +284,122 @@ async def health() -> dict[str, Any]:
         "segmenter_input_mode": os.getenv("FOODSEG_STRATEGY", "letterbox-padding-512x512"),
         "segmenter_tile_size": FOODSEG_TILE_SIZE,
         "segmenter_tile_overlap": FOODSEG_TILE_OVERLAP,
-        "qwen_context_tokens": QWEN_NUM_CTX,
         "max_image_pixels": MAX_IMAGE_PIXELS,
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         "density_categories": list(DENSITY_TABLE),
-        "qwen_model": QWEN_MODEL,
-        "offline_runtime": True,
+        "gemini_router": {
+            "model": gemini_stat["model"],
+            "total_keys": gemini_stat["total_keys"],
+            "active_keys": gemini_stat["active_keys"],
+            "cooldown_keys": gemini_stat["cooldown_keys"],
+            "has_available_keys": gemini_router.has_available_keys,
+        },
+        "vision_provider": "gemini",
     }
+
+
+@app.get("/gemini/keys")
+async def get_gemini_keys() -> dict[str, Any]:
+    """Return status and masked keys in the Gemini Round-Robin pool."""
+    return gemini_router.get_pool_status()
+
+
+@app.post("/gemini/keys")
+async def update_gemini_keys(request: Request) -> dict[str, Any]:
+    """
+    Add or update keys in the Gemini Round-Robin pool.
+    Body formats accepted:
+      {"keys": ["AIzaSy...", ...]}
+      {"key": "AIzaSy..."}
+      {"action": "replace" | "add", "keys": [...]}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    action = body.get("action", "add")
+    keys_input = body.get("keys")
+    if keys_input is None and "key" in body:
+        keys_input = [body["key"]]
+    elif isinstance(keys_input, str):
+        keys_input = [k.strip() for k in re.split(r"[,;\n\r\t]+", keys_input) if k.strip()]
+
+    if not isinstance(keys_input, list):
+        raise HTTPException(status_code=422, detail="Expected 'keys' list or string")
+
+    added = 0
+    if action == "replace":
+        gemini_router.set_keys(keys_input)
+    else:
+        for k in keys_input:
+            if isinstance(k, str) and k.strip():
+                if gemini_router.add_key(k.strip()):
+                    added += 1
+
+    return {
+        "status": "ok",
+        "message": f"Successfully updated Gemini key pool (added {added} new key(s)).",
+        "pool": gemini_router.get_pool_status(),
+    }
+
+
+@app.delete("/gemini/keys/{identifier}")
+async def delete_gemini_key(identifier: str) -> dict[str, Any]:
+    """Remove a key from the pool by exact string or masked identifier."""
+    removed = gemini_router.remove_key(identifier)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Key '{identifier}' not found in pool.")
+    return {
+        "status": "ok",
+        "message": f"Removed key '{identifier}' from pool.",
+        "pool": gemini_router.get_pool_status(),
+    }
+
+
+@app.post("/gemini/test")
+async def test_gemini_connectivity() -> dict[str, Any]:
+    """Test Gemini Round-Robin router connectivity and failover across configured keys."""
+    return await gemini_router.test_connectivity()
+
+
+@app.get("/gemini/models")
+async def get_gemini_models() -> dict[str, Any]:
+    """Return available Gemini models for selection."""
+    return {
+        "current_model": gemini_router.model,
+        "available_models": [
+            {
+                "id": "gemini-2.5-flash",
+                "name": "Gemini 2.5 Flash",
+                "description": "Recommended: fastest multimodal food recognition, native JSON schema, highest accuracy."
+            },
+            {
+                "id": "gemini-1.5-flash",
+                "name": "Gemini 1.5 Flash",
+                "description": "High-throughput fallback model with excellent multimodal bounding."
+            },
+            {
+                "id": "gemini-2.5-pro",
+                "name": "Gemini 2.5 Pro",
+                "description": "Deep reasoning model for complex mixed-ingredient platters and exotic dishes."
+            },
+        ]
+    }
+
+
+@app.post("/gemini/model")
+async def set_gemini_model(request: Request) -> dict[str, Any]:
+    """Update active Gemini model."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    model = body.get("model")
+    if not model or not isinstance(model, str):
+        raise HTTPException(status_code=422, detail="Missing 'model' string")
+    gemini_router.model = model.strip()
+    return {"status": "ok", "model": gemini_router.model}
 
 
 async def _read_food_image(upload: UploadFile, field_name: str) -> tuple[Image.Image, bytes]:
@@ -394,7 +537,7 @@ async def vision(
 
     segmented_at = time.perf_counter()
 
-    # 3. Dynamic Multi-Crop Extraction & Segmentation Priors Formatting
+    # 3. Keep FoodSeg for geometry only. It must not name foods for Qwen.
     top_thumb_b64 = await anyio.to_thread.run_sync(get_vlm_thumbnail_b64, top_for_analysis, 768)
     side_thumb_b64 = (
         await anyio.to_thread.run_sync(get_vlm_thumbnail_b64, side, 768)
@@ -402,28 +545,70 @@ async def vision(
         else None
     )
     focal_crops_b64 = await anyio.to_thread.run_sync(extract_focal_crops, top_for_analysis, clusters, 4)
-    priors_xml = format_segmentation_priors(clusters)
-
-    # 4. Multi-Crop Qwen VLM Reasoning
+    # 4. Multimodal culinary analysis via Gemini Round-Robin Router (with dynamic failover)
     parsed = None
+    recognition = None
     vlm_failed = False
-    try:
-        parsed = await query_qwen_vlm(
-            top_thumb_b64=top_thumb_b64,
-            plate_diameter_cm=plate_diameter_cm,
-            ollama_url=OLLAMA_URL,
-            qwen_model=QWEN_MODEL,
-            side_thumb_b64=side_thumb_b64,
-            focal_crops_b64=focal_crops_b64,
-            priors_xml=priors_xml,
-            food_hint=food_hint,
-            num_threads=4,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Ollama/Qwen processing skipped or unusable (%s). Falling back to FoodSeg103 geometric segmentation.",
-            exc,
-        )
+    priors_xml = format_segmentation_priors(clusters) if clusters else ""
+
+    if gemini_router.has_keys:
+        try:
+            logger.info(
+                "Routing meal analysis to Gemini Key Router (model=%s, %d keys in pool)",
+                gemini_router.model, len(gemini_router._keys)
+            )
+            parsed = await gemini_router.analyze_plate(
+                top_image_b64=top_thumb_b64,
+                plate_diameter_cm=plate_diameter_cm,
+                side_image_b64=side_thumb_b64,
+                food_hint=food_hint,
+                priors_xml=priors_xml,
+            )
+            recognition = {
+                "is_food": parsed.get("is_food", True),
+                "dish": parsed.get("dish", "Meal"),
+                "visible_foods": [c["name"] for c in parsed.get("components", [])],
+            }
+            logger.info(
+                "Gemini analysis successful [Dish=%s, Key=%s, Components=%d]",
+                parsed.get("dish"), parsed.get("vlm_key_used"), len(parsed.get("components", []))
+            )
+        except GeminiAllKeysExhaustedError as exc:
+            logger.warning("All Gemini API keys exhausted or rate-limited: %s. Falling back to geometric segmentation.", exc)
+            vlm_failed = True
+        except Exception as exc:
+            logger.error("Gemini router invocation failed: %s. Falling back to geometric segmentation.", exc)
+            vlm_failed = True
+    elif VISION_PROVIDER == "qwen":
+        try:
+            recognition = await query_qwen_recognition(
+                top_thumb_b64=top_thumb_b64,
+                ollama_url=OLLAMA_URL,
+                qwen_model=QWEN_MODEL,
+                side_thumb_b64=side_thumb_b64,
+                food_hint=food_hint,
+                num_threads=4,
+            )
+            if recognition.get("is_food") is False:
+                parsed = {**recognition, "components": [], "side_view_observation": "No food detected"}
+            else:
+                parsed = await query_qwen_vlm(
+                    top_thumb_b64=top_thumb_b64,
+                    plate_diameter_cm=plate_diameter_cm,
+                    ollama_url=OLLAMA_URL,
+                    qwen_model=QWEN_MODEL,
+                    side_thumb_b64=side_thumb_b64,
+                    focal_crops_b64=focal_crops_b64,
+                    recognized_foods=recognition["visible_foods"],
+                    food_hint=food_hint,
+                    num_threads=4,
+                )
+        except Exception as exc:
+            logger.warning("Qwen processing skipped: %s. Falling back to FoodSeg103.", exc)
+            vlm_failed = True
+    else:
+        logger.warning("No Gemini API keys configured. Set keys via Settings UI or GEMINI_API_KEYS. Falling back to FoodSeg103.")
+        vlm_failed = True
 
     total_pixels = max(1, top.width * top.height)
     food_pixel_fraction = top_food_pixels / total_pixels
@@ -561,11 +746,13 @@ async def vision(
             "side_view_observation": "VLM reasoning unavailable; geometric segmentation fallback applied.",
         }
 
-    # 5. Spatial-Semantic Consensus Reconciliation
+    # 5. Spatial cluster reconciliation is display-only; it cannot rename Qwen components.
     reconcile_clusters_with_vlm(clusters, parsed["components"])
 
-    # 6. Recipe Disaggregation (Physical Mass Preservation for Submerged Solids)
-    parsed["components"] = disaggregate_recipe_components(parsed["components"], parsed.get("dish", ""))
+    # Never manufacture hidden recipe ingredients from a photograph. The visible dish name is
+    # passed directly to the nutrition model, which avoids false items such as "Rice in Chutney".
+    review_reasons = _review_reasons(recognition, parsed["components"], vlm_failed)
+    review_required = bool(review_reasons)
 
     logger.info(
         "vision completed: segmentation=%.2fs qwen=%.2fs total=%.2fs top=%sx%s side=%s clusters=%d",
@@ -607,6 +794,8 @@ async def vision(
             "VLM visual reasoning failed or was unavailable; components were estimated from geometric segmentation masks. "
             "Labels represent coarse visual categories, not verified culinary ingredients."
         )
+    if review_required:
+        limitations.append("Review the detected foods before logging: " + " ".join(review_reasons))
     if top_classes and side_classes and not views_share_class:
         limitations.append(
             "FoodSeg labels differ between the two views (top: " + ", ".join(top_classes[:3]) +
@@ -643,19 +832,22 @@ async def vision(
         "scale_reference": {"plate_diameter_cm": plate_diameter_cm, **plate_scale},
         "spatial_clusters": clusters,
         "side_view_observation": parsed.get("side_view_observation", ""),
+        "vlm_provider": parsed.get("vlm_provider", "DeepLabV3+ Geometric Fallback" if vlm_failed else f"Gemini ({gemini_router.model})"),
+        "vlm_key_used": parsed.get("vlm_key_used", "N/A"),
         "image_processing": {
             "top_image_px": {"width": top.width, "height": top.height},
             "side_image_px": {"width": side.width, "height": side.height} if side else None,
             "side_view_provided": has_distinct_side,
             "perspective_rectified": rectified_homography,
             "focal_crops_extracted": len(focal_crops_b64),
-            "qwen_input": (
-                f"Multi-crop payload (overhead 768px + {len(focal_crops_b64)} focal crops"
-                + (" + side elevation)" if has_distinct_side else ")")
-            ),
+            "vlm_provider": parsed.get("vlm_provider", "DeepLabV3+ Geometric Fallback" if vlm_failed else f"Gemini ({gemini_router.model})"),
+            "vlm_key_used": parsed.get("vlm_key_used", "N/A"),
             "segmentation_input": "Native resolution with ImageNet mean padding and continuous logit interpolation",
         },
         "method": method_summary,
+        "review_required": review_required,
+        "review_reasons": review_reasons,
+        "recognized_visible_foods": recognition.get("visible_foods", []) if recognition else [],
         "limitations": limitations,
         "segmentation": {
             "top_view": {"areas": top_areas, "detections": top_detections},

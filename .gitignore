@@ -8,6 +8,8 @@ __pycache__/
 
 # Local configuration, temporary artifacts, and logs
 .env
+gemini_keys.json
+vision/gemini_keys.json
 logs/
 *.log
 *.bak

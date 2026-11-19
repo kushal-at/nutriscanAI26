@@ -124,11 +124,6 @@ VLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                         "type": "string",
                         "enum": ["flat", "low", "medium", "heaped"],
                     },
-                    "cluster_id": {"type": "integer"},
-                    "submerged_ingredients": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
                 },
                 "required": ["name", "fraction", "elevation"],
                 "additionalProperties": False,
@@ -136,6 +131,17 @@ VLM_OUTPUT_SCHEMA: Dict[str, Any] = {
         },
     },
     "required": ["is_food", "dish", "components"],
+    "additionalProperties": False,
+}
+
+VLM_RECOGNITION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "is_food": {"type": "boolean"},
+        "dish": {"type": "string"},
+        "visible_foods": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["is_food", "dish", "visible_foods"],
     "additionalProperties": False,
 }
 
@@ -407,6 +413,159 @@ def parse_component_response(text: str, plate_diameter_cm: float, has_side_view:
     return {"is_food": True, "dish": dish, "side_view_observation": side_obs, "components": components}
 
 
+def parse_recognition_response(text: str) -> Dict[str, Any]:
+    """Validate the deliberately simple first-pass culinary recognition response."""
+    value = extract_json_payload(text)
+    if not isinstance(value, dict):
+        raise ValueError("Qwen recognition response did not contain valid JSON")
+    if value.get("is_food") is False:
+        return {"is_food": False, "dish": "Non-Food Image", "visible_foods": []}
+
+    dish = str(value.get("dish", "Plated Meal")).strip()
+    foods = []
+    for raw_name in value.get("visible_foods", []):
+        name = str(raw_name).strip().title()
+        if is_valid_food_component_name(name) and name.lower() not in {item.lower() for item in foods}:
+            foods.append(name)
+    # Small local models occasionally place the obvious main food only in `dish`.
+    # A single-word dish is safe to recover as a visible component (for example, "Idli").
+    dish_name = dish.title()
+    if len(dish_name.split()) == 1 and is_valid_food_component_name(dish_name) and dish_name.lower() not in {"meal", "food", "plate"}:
+        if dish_name.lower() not in {item.lower() for item in foods}:
+            foods.insert(0, dish_name)
+    if not foods:
+        raise ValueError("Qwen recognition response did not identify visible foods")
+    return {"is_food": True, "dish": dish if is_valid_food_component_name(dish) else "Plated Meal", "visible_foods": foods}
+
+
+async def _call_qwen(
+    *, prompt: str, images: list[str], output_schema: Dict[str, Any], ollama_url: str,
+    qwen_model: str, num_threads: int, max_tokens: int,
+) -> str:
+    """Run one local structured Qwen request without adding synthetic assistant turns."""
+    payload = {
+        "model": qwen_model,
+        "messages": [{"role": "user", "content": prompt, "images": images}],
+        "stream": False,
+        "think": False,
+        "format": output_schema,
+        "options": {"temperature": 0, "num_predict": max_tokens, "num_ctx": 4096, "num_thread": num_threads},
+        "keep_alive": "10m",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
+            response = await client.post(f"{ollama_url.rstrip('/')}/api/chat", json=payload)
+            response.raise_for_status()
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.RequestError) as net_err:
+        raise RuntimeError(f"Ollama connection error: {net_err}") from net_err
+
+    result = response.json()
+    message = result.get("message", {})
+    content = message.get("content", "").strip()
+    if not content and message.get("thinking"):
+        thinking = message["thinking"]
+        if "{" in thinking and "}" in thinking:
+            content = thinking[thinking.find("{"):thinking.rfind("}") + 1].strip()
+    if not content:
+        raise ValueError(f"Qwen returned empty content (done_reason={result.get('done_reason', '')})")
+    return re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+
+
+async def query_qwen_recognition(
+    top_thumb_b64: str, ollama_url: str, qwen_model: str, side_thumb_b64: str | None = None,
+    food_hint: str | None = None, num_threads: int = 4,
+) -> Dict[str, Any]:
+    """Identify only visible foods before geometry can bias the culinary answer."""
+    images = [top_thumb_b64] + ([side_thumb_b64] if side_thumb_b64 and side_thumb_b64 != top_thumb_b64 else [])
+    hint = f' User context: "{food_hint.strip()}".' if food_hint and food_hint.strip() else ""
+    prompt = (
+        "Identify the foods visibly present in this meal photo. Name only what can be seen; do not infer hidden "
+        "ingredients, recipes, or ingredients inside sauces. Treat bowls of chutney, raita, dal, or curry as their "
+        "visible dish, not as their unseen contents. For Indian breakfast foods, distinguish a thick white round steamed "
+        "rice cake (idli) from a thin browned crepe (dosa): never call a thick white idli a dosa." + hint +
+        " Return JSON with is_food, dish, and visible_foods; include the main food in visible_foods."
+    )
+    return parse_recognition_response(await _call_qwen(
+        prompt=prompt, images=images, output_schema=VLM_RECOGNITION_SCHEMA, ollama_url=ollama_url,
+        qwen_model=qwen_model, num_threads=num_threads, max_tokens=512,
+    ))
+
+
+async def _call_gemini(
+    *, prompt: str, images: list[str], api_key: str, model: str,
+) -> str:
+    """Call Gemini's multimodal API without persisting credentials or image data."""
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+    parts = [{"text": prompt}]
+    parts.extend({"inlineData": {"mimeType": "image/jpeg", "data": image}} for image in images)
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
+            response = await client.post(
+                endpoint,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json=payload,
+            )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(f"Gemini API request failed (HTTP {exc.response.status_code})") from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Gemini API request failed: {exc}") from exc
+
+    try:
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ValueError("Gemini returned no usable recognition response") from exc
+
+
+async def query_gemini_recognition(
+    top_thumb_b64: str, api_key: str, model: str, side_thumb_b64: str | None = None,
+    food_hint: str | None = None,
+) -> Dict[str, Any]:
+    """Use Gemini as the culinary authority for visible food names."""
+    images = [top_thumb_b64] + ([side_thumb_b64] if side_thumb_b64 and side_thumb_b64 != top_thumb_b64 else [])
+    hint = f' User context: "{food_hint.strip()}".' if food_hint and food_hint.strip() else ""
+    prompt = (
+        "Identify every distinct, visibly present food item in this Indian meal photo. Name only what can be seen; "
+        "do not infer hidden ingredients. Distinguish thick white steamed idli from thin browned dosa. Treat bowls "
+        "as their visible dish, such as sambar/dal, raita, or chutney." + hint +
+        ' Return JSON only: {"is_food": true, "dish": "short meal name", "visible_foods": ["food name"]}.'
+    )
+    return parse_recognition_response(await _call_gemini(
+        prompt=prompt, images=images, api_key=api_key, model=model,
+    ))
+
+
+async def query_gemini_vlm(
+    top_thumb_b64: str, plate_diameter_cm: float, api_key: str, model: str,
+    recognized_foods: list[str], side_thumb_b64: str | None = None,
+    focal_crops_b64: list[str] | None = None,
+) -> Dict[str, Any]:
+    """Ask Gemini for visible-food area shares used by the local weight estimator."""
+    images = [top_thumb_b64]
+    images.extend((focal_crops_b64 or [])[:2])
+    if side_thumb_b64 and side_thumb_b64 != top_thumb_b64:
+        images.append(side_thumb_b64)
+    prompt = (
+        "Use the meal photos to estimate surface-area shares for only these already verified visible foods: "
+        + ", ".join(recognized_foods)
+        + '. Do not add foods or hidden ingredients. Fractions must sum to 1. '
+        'Return JSON only: {"is_food": true, "dish": "short meal name", '
+        '"side_view_observation": "brief observation", "components": '
+        '[{"name": "verified food name", "fraction": 0.25, "elevation": "flat|low|medium|heaped"}]}.'
+    )
+    return parse_component_response(
+        await _call_gemini(prompt=prompt, images=images, api_key=api_key, model=model),
+        plate_diameter_cm,
+        has_side_view=bool(side_thumb_b64 and side_thumb_b64 != top_thumb_b64),
+    )
+
+
 async def query_qwen_vlm(
     top_thumb_b64: str,
     plate_diameter_cm: float,
@@ -414,11 +573,11 @@ async def query_qwen_vlm(
     qwen_model: str,
     side_thumb_b64: str | None = None,
     focal_crops_b64: list[str] | None = None,
-    priors_xml: str = "",
+    recognized_foods: list[str] | None = None,
     food_hint: str | None = None,
     num_threads: int = 4,
 ) -> Dict[str, Any]:
-    """Execute optimized CPU VLM chat inference via Ollama with focal crops, priors, and JSON Schema."""
+    """Measure already-recognized visible foods; segmentation labels never name ingredients."""
     has_side = bool(side_thumb_b64 and side_thumb_b64 != top_thumb_b64)
     images = [top_thumb_b64]
     crops_to_send = (focal_crops_b64[:2] if focal_crops_b64 else [])
@@ -447,84 +606,29 @@ async def query_qwen_vlm(
             f'\nUser culinary context / hint: "{food_hint.strip()}". Use this context to accurately name dishes and ingredients.'
         )
 
-    if priors_xml and priors_xml.strip():
-        prompt_parts.append(
-            f"\nDetected visual segmentation candidates & spatial clusters:\n{priors_xml.strip()}\n"
-        )
+    allowed_foods = ", ".join(recognized_foods or [])
 
     prompt_parts.append(
         "\nTasks:\n"
         "1. First verify if the image contains food, a meal, or edible items. "
         "If the photo shows non-food objects (e.g. animals, pets, electronics, vehicles, furniture, empty plate, clothing, documents, random non-food scene), "
         "output strictly: {\"is_food\": false, \"dish\": \"Non-Food Item\", \"side_view_observation\": \"No food detected in image\", \"components\": []}.\n"
-        "2. If food IS present: set 'is_food': true, identify the exact culinary dish name (e.g. Chicken Dum Biryani, Paneer Butter Masala with Naan, Steamed Rice with Dal).\n"
-        "3. Identify all distinct food components with their top-view surface area fractions summing to 1.0.\n"
+        "2. If food IS present: set 'is_food': true. Use only visibly present foods from this verified list: " + allowed_foods + ".\n"
+        "3. Identify all distinct visible components with their top-view surface area fractions summing to 1.0. Do not add hidden ingredients.\n"
         "4. For each component, assign:\n"
         "   - 'name': culinary name (e.g. Rice, Dal, Chicken Curry, Roti, Salad)\n"
         "   - 'fraction': area fraction (0.0 to 1.0)\n"
         "   - 'elevation': one of 'flat', 'low', 'medium', 'heaped'\n"
-        "   - 'cluster_id': matching cluster ID from visual segmentation priors if applicable\n"
-        "   - 'submerged_ingredients': for composite dishes or curries, list hidden or submerged solids (e.g. [\"Chicken\"] or [\"Paneer\", \"Capsicum\"])\n"
         "5. If a side view is provided, observe it to assess overall vertical height.\n\n"
         "Output strictly valid JSON matching schema:\n"
-        '{"is_food": true, "dish": "Exact Dish Name", "side_view_observation": "Brief elevation observation", '
-        '"components": [{"name": "Food Name", "fraction": 0.6, "elevation": "medium", "cluster_id": 1, "submerged_ingredients": []}]}'
+        '{"is_food": true, "dish": "Plated Meal", "side_view_observation": "Brief elevation observation", '
+        '"components": [{"name": "Visible Food Name", "fraction": 0.6, "elevation": "medium"}]}'
     )
 
     prompt = "\n".join(prompt_parts)
 
-    messages = [
-        {"role": "user", "content": prompt, "images": images},
-        {"role": "assistant", "content": "<think>\n</think>\n"},
-    ]
-
-    payload = {
-        "model": qwen_model,
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "format": VLM_OUTPUT_SCHEMA,
-        "options": {
-            "temperature": 0,
-            "num_predict": 1536,
-            "num_ctx": 4096,
-            "num_thread": num_threads,
-        },
-        "keep_alive": "10m",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
-            response = await client.post(f"{ollama_url.rstrip('/')}/api/chat", json=payload)
-            response.raise_for_status()
-    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.RequestError) as net_err:
-        logger.warning("Ollama connection failed (%s). Offline fallback will be applied.", net_err)
-        raise RuntimeError(f"Ollama connection error: {net_err}") from net_err
-
-    ollama_result = response.json()
-    done_reason = ollama_result.get("done_reason", "")
-    if done_reason == "length":
-        logger.warning("Qwen generation reached token limit (done_reason=length); output may be truncated.")
-
-    message = ollama_result.get("message", {})
-    content = message.get("content", "").strip()
-
-    # If thinking tags are embedded in content, strip them
-    if "<think>" in content and "</think>" in content:
-        content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
-
-    # If content was returned in message['thinking'], recover it
-    if not content and message.get("thinking"):
-        th = message["thinking"]
-        if "{" in th and "}" in th:
-            content = th[th.find("{"):th.rfind("}")+1].strip()
-
-    # STRICT RULE: Never interpret empty content as a food-identification response!
-    if not content:
-        logger.warning(
-            "Qwen returned empty content (thinking suppressed or generation aborted). done_reason=%s, thinking_len=%d",
-            done_reason, len(message.get("thinking", "")),
-        )
-        raise ValueError("Qwen returned empty content; model generation failed or was suppressed")
-
+    content = await _call_qwen(
+        prompt=prompt, images=images, output_schema=VLM_OUTPUT_SCHEMA, ollama_url=ollama_url,
+        qwen_model=qwen_model, num_threads=num_threads, max_tokens=1024,
+    )
     return parse_component_response(content, plate_diameter_cm, has_side_view=has_side)

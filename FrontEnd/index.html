@@ -768,6 +768,15 @@
                             <button class="btn btn-sm btn-outline" id="btn-retest-backend">Test Ping</button>
                         </div>
 
+                        <div class="settings-row" id="row-gemini-check">
+                            <div class="settings-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;"><i data-lucide="sparkles"></i></div>
+                            <div class="setting-meta">
+                                <b>Gemini AI Key Router</b>
+                                <span id="profile-gemini-desc">Checking key pool...</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-open-gemini-modal" onclick="window.nutriScanOpenGeminiModal()">Manage Keys</button>
+                        </div>
+
                         <div class="settings-row">
                             <div class="settings-icon"><i data-lucide="download"></i></div>
                             <div class="setting-meta">
@@ -1405,6 +1414,72 @@
                     <button type="button" class="btn btn-sm btn-outline" onclick="window.handleResetSupabaseConfig()">Reset Default</button>
                     <button type="button" class="btn btn-sm btn-forest" onclick="window.handleSaveSupabaseConfig()" style="flex: 1;">Save & Reconnect</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 11: GEMINI AI MULTI-KEY ROUTER CONFIG    -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-gemini-config">
+        <div class="modal" style="max-width: 520px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: linear-gradient(135deg, #10b981, #06b6d4); color: white;"><i data-lucide="sparkles"></i></span>
+                    <div>
+                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Gemini AI Key Router</h3>
+                        <div class="tiny" style="color: var(--muted);">Round-robin key pool with dynamic 429 failover</div>
+                    </div>
+                </div>
+                <div class="modal-close" data-close-modal="modal-gemini-config" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding-top: 14px;">
+                <p class="tiny" style="margin-bottom: 14px; line-height: 1.5; color: var(--muted);">
+                    Configure multiple Google Gemini API keys. NutriScanAI automatically balances requests across your keys in a round-robin cycle and fails over instantly if a key encounters rate limits (HTTP 429).
+                </p>
+
+                <!-- Active Keys List -->
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="form-label" style="margin: 0; font-weight: 700;">Configured Keys in Pool</label>
+                        <span id="gemini-pool-counter" class="badge" style="font-size: 11px;">0 Keys</span>
+                    </div>
+                    <div id="gemini-keys-list" style="background: var(--surface-light, rgba(0,0,0,0.03)); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                        <div class="tiny" style="color: var(--muted); text-align: center; padding: 12px 0;">Loading keys...</div>
+                    </div>
+                </div>
+
+                <!-- Add Keys Input -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="cfg-gemini-new-key">Add API Key(s)</label>
+                    <textarea id="cfg-gemini-new-key" class="form-input" rows="2" placeholder="Paste one or more Gemini API keys (comma or newline separated, starting with AIzaSy...)" style="font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <div class="tiny" style="color: var(--muted); margin-top: 4px;">Get free API keys at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color: var(--primary);">Google AI Studio</a>. Keys are never logged in plain text.</div>
+                </div>
+
+                <!-- Model Selection -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="form-label" for="cfg-gemini-model">Gemini Model</label>
+                    <select id="cfg-gemini-model" class="form-input" style="font-size: 13px;" onchange="window.handleChangeGeminiModel()">
+                        <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended: fastest, multimodal JSON)</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Lightweight & high throughput)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep reasoning for complex meals)</option>
+                    </select>
+                </div>
+
+                <!-- Test / Save Actions -->
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-test" onclick="window.handleTestGeminiKeys()" style="display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="zap" class="icon-sm"></i> Test Key Pool
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-refresh" onclick="window.loadGeminiKeysStatus()" title="Refresh status">
+                        <i data-lucide="refresh-cw" class="icon-sm"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-forest" id="btn-gemini-save" onclick="window.handleSaveGeminiKeys()" style="flex: 1; min-width: 120px;">
+                        Add Keys to Pool
+                    </button>
+                </div>
+
+                <div id="gemini-test-feedback" class="tiny" style="margin-top: 10px; min-height: 18px; display: none;"></div>
             </div>
         </div>
     </div>
