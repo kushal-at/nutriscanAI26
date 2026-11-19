@@ -38,8 +38,8 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger("foodvision.gemini")
 
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-FALLBACK_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+FALLBACK_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 KEYS_FILE_DEFAULT = Path(__file__).resolve().parent / "gemini_keys.json"
 VAULT_KEY_FILE = Path(__file__).resolve().parent / ".gemini_vault.key"

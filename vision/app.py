@@ -105,7 +105,7 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen3-vl:2b")
 VISION_PROVIDER = os.getenv("VISION_PROVIDER", "gemini").strip().lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview").strip()
 QWEN_NUM_CTX = int(os.getenv("QWEN_NUM_CTX", "4096"))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(25 * 1024 * 1024)))  # 25 MB upload limit
 MAX_IMAGE_PIXELS = 50_000_000
@@ -419,14 +419,14 @@ async def get_gemini_models() -> dict[str, Any]:
         "current_model": gemini_router.model,
         "available_models": [
             {
-                "id": "gemini-2.5-flash",
-                "name": "Gemini 2.5 Flash",
-                "description": "Recommended: fastest multimodal food recognition, native JSON schema, highest accuracy."
+                "id": "gemini-3-flash-preview",
+                "name": "Gemini 3 Flash Preview",
+                "description": "Recommended: latest Google model, fastest multimodal food recognition, native JSON schema."
             },
             {
-                "id": "gemini-1.5-flash",
-                "name": "Gemini 1.5 Flash",
-                "description": "High-throughput fallback model with excellent multimodal bounding."
+                "id": "gemini-2.5-flash",
+                "name": "Gemini 2.5 Flash",
+                "description": "Multimodal culinary recognition with native schema support."
             },
             {
                 "id": "gemini-2.5-pro",
