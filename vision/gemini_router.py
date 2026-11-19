@@ -184,13 +184,17 @@ class SupabaseKeyVault:
         return self._fernet.encrypt(plain_key.strip().encode("utf-8")).decode("utf-8")
 
     def decrypt_key(self, ciphertext: str) -> Optional[str]:
-        """Decrypt ciphertext token back into plain API key string."""
+        """Decrypt ciphertext token back into plain API key string with plaintext fallback."""
+        clean = ciphertext.strip()
         if not self._fernet:
-            return ciphertext.strip()
+            return clean
         try:
-            return self._fernet.decrypt(ciphertext.strip().encode("utf-8")).decode("utf-8")
-        except Exception as e:
-            logger.error("Failed to decrypt Gemini key from Supabase vault: %s", e)
+            return self._fernet.decrypt(clean.encode("utf-8")).decode("utf-8")
+        except Exception:
+            # Transparent support for manual SQL inserts where raw keys were placed into key_ciphertext
+            if clean.startswith("AIzaSy") or clean.startswith("AQ.") or (len(clean) >= 20 and not clean.startswith("gAAAAA")):
+                return clean
+            logger.error("Failed to decrypt Gemini key from Supabase vault.")
             return None
 
     def get_headers(self, user_token: Optional[str] = None) -> Dict[str, str]:
