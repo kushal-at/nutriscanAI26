@@ -2448,26 +2448,42 @@
 
         const goals = Storage.getGoals();
 
-        document.getElementById('detail-meal-title').textContent = `${meal.type} Details`;
-        document.getElementById('detail-meal-img').src = meal.image || "assets/nourish-bowl.png";
-        document.getElementById('detail-meal-name').textContent = meal.name;
-        document.getElementById('detail-meal-time').textContent = `${meal.type} · ${meal.time || '12:00 PM'} · ${meal.date}`;
-        document.getElementById('detail-meal-kcal').innerHTML = `${meal.calories}<small>kcal</small>`;
+        const titleEl = document.getElementById('detail-meal-title');
+        if (titleEl) titleEl.textContent = `${meal.type} Details`;
+
+        const imgEl = document.getElementById('detail-meal-img');
+        if (imgEl) imgEl.src = meal.image || "assets/nourish-bowl.png";
+
+        const nameEl = document.getElementById('detail-meal-name');
+        if (nameEl) nameEl.textContent = meal.name;
+
+        const timeEl = document.getElementById('detail-meal-time');
+        if (timeEl) timeEl.textContent = `${meal.type} · ${meal.time || '12:00 PM'} · ${meal.date}`;
+
+        const kcalEl = document.getElementById('detail-meal-kcal');
+        if (kcalEl) kcalEl.innerHTML = `${meal.calories}<small>kcal</small>`;
 
         const pPct = Math.round((meal.protein / (goals.protein || 100)) * 100);
         const cPct = Math.round((meal.carbs / (goals.carbs || 220)) * 100);
         const fPct = Math.round((meal.fat / (goals.fat || 65)) * 100);
 
-        document.getElementById('detail-meal-p').textContent = `${meal.protein || 0}g`;
-        document.getElementById('detail-meal-p-pct').textContent = `${pPct}% of target`;
+        const pEl = document.getElementById('detail-meal-p');
+        if (pEl) pEl.textContent = `${meal.protein || 0}g`;
+        const pPctEl = document.getElementById('detail-meal-p-pct');
+        if (pPctEl) pPctEl.textContent = `${pPct}% of target`;
 
-        document.getElementById('detail-meal-c').textContent = `${meal.carbs || 0}g`;
-        document.getElementById('detail-meal-c-pct').textContent = `${cPct}% of target`;
+        const cEl = document.getElementById('detail-meal-c');
+        if (cEl) cEl.textContent = `${meal.carbs || 0}g`;
+        const cPctEl = document.getElementById('detail-meal-c-pct');
+        if (cPctEl) cPctEl.textContent = `${cPct}% of target`;
 
-        document.getElementById('detail-meal-f').textContent = `${meal.fat || 0}g`;
-        document.getElementById('detail-meal-f-pct').textContent = `${fPct}% of target`;
+        const fEl = document.getElementById('detail-meal-f');
+        if (fEl) fEl.textContent = `${meal.fat || 0}g`;
+        const fPctEl = document.getElementById('detail-meal-f-pct');
+        if (fPctEl) fPctEl.textContent = `${fPct}% of target`;
 
-        document.getElementById('detail-meal-fib').textContent = `${meal.fiber || 6}g`;
+        const fibEl = document.getElementById('detail-meal-fib');
+        if (fibEl) fibEl.textContent = `${meal.fiber || 6}g`;
 
         const compBody = document.getElementById('detail-components-body');
         if (compBody) {
@@ -2492,18 +2508,120 @@
             }
         }
 
+        // Delete button
         const btnDel = document.getElementById('btn-detail-delete');
         if (btnDel) {
             btnDel.onclick = () => {
-                Storage.deleteMeal(meal.id);
+                if (confirm(`Are you sure you want to delete "${meal.name}"?`)) {
+                    Storage.deleteMeal(meal.id);
+                    closeModal('modal-meal-details');
+                    showToast(`"${meal.name}" deleted`);
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                }
+            };
+        }
+
+        // Log Again Today button (Quick Clone)
+        const btnClone = document.getElementById('btn-detail-clone');
+        if (btnClone) {
+            btnClone.onclick = () => {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const cloned = {
+                    ...meal,
+                    id: `meal-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                    date: getTodayDateString(0),
+                    time: timeStr
+                };
+                Storage.addMeal(cloned);
                 closeModal('modal-meal-details');
-                showToast(`"${meal.name}" deleted`);
+                showToast(`Logged "${cloned.name}" again for today!`);
                 renderDashboard();
                 renderHistory();
                 renderReports();
             };
         }
 
+        // Edit Meal Mode & Form controls
+        const editForm = document.getElementById('detail-edit-form');
+        const editName = document.getElementById('edit-meal-name');
+        const editType = document.getElementById('edit-meal-type');
+        const editCalories = document.getElementById('edit-meal-calories');
+        const editProtein = document.getElementById('edit-meal-protein');
+        const editCarbs = document.getElementById('edit-meal-carbs');
+        const editFat = document.getElementById('edit-meal-fat');
+        const btnEdit = document.getElementById('btn-detail-edit');
+        const btnCancel = document.getElementById('btn-cancel-edit-meal');
+        const btnSave = document.getElementById('btn-save-edit-meal');
+
+        if (editForm) editForm.style.display = 'none';
+        if (btnEdit) {
+            btnEdit.innerHTML = `<i data-lucide="edit-3" class="icon-sm"></i> Edit`;
+            btnEdit.onclick = () => {
+                if (!editForm) return;
+                const isVisible = editForm.style.display === 'block';
+                if (isVisible) {
+                    editForm.style.display = 'none';
+                    btnEdit.innerHTML = `<i data-lucide="edit-3" class="icon-sm"></i> Edit`;
+                } else {
+                    editForm.style.display = 'block';
+                    if (editName) editName.value = meal.name || '';
+                    if (editType) editType.value = meal.type || 'Lunch';
+                    if (editCalories) editCalories.value = meal.calories || 0;
+                    if (editProtein) editProtein.value = meal.protein || 0;
+                    if (editCarbs) editCarbs.value = meal.carbs || 0;
+                    if (editFat) editFat.value = meal.fat || 0;
+                    btnEdit.innerHTML = `<i data-lucide="eye" class="icon-sm"></i> View`;
+                }
+                renderLucide();
+            };
+        }
+
+        if (btnCancel) {
+            btnCancel.onclick = () => {
+                if (editForm) editForm.style.display = 'none';
+                if (btnEdit) {
+                    btnEdit.innerHTML = `<i data-lucide="edit-3" class="icon-sm"></i> Edit`;
+                    renderLucide();
+                }
+            };
+        }
+
+        if (btnSave) {
+            btnSave.onclick = () => {
+                const allMeals = Storage.getMeals();
+                const idx = allMeals.findIndex(m => m.id === meal.id);
+                if (idx !== -1) {
+                    const newName = (editName && editName.value.trim()) || meal.name;
+                    const newType = (editType && editType.value) || meal.type;
+                    const newKcal = Math.max(0, parseInt(editCalories ? editCalories.value : meal.calories, 10) || 0);
+                    const newP = Math.max(0, parseFloat(editProtein ? editProtein.value : meal.protein) || 0);
+                    const newC = Math.max(0, parseFloat(editCarbs ? editCarbs.value : meal.carbs) || 0);
+                    const newF = Math.max(0, parseFloat(editFat ? editFat.value : meal.fat) || 0);
+
+                    allMeals[idx].name = newName;
+                    allMeals[idx].type = newType;
+                    allMeals[idx].calories = newKcal;
+                    allMeals[idx].protein = newP;
+                    allMeals[idx].carbs = newC;
+                    allMeals[idx].fat = newF;
+
+                    Storage.saveMeals(allMeals);
+                    if (window.NutriScanSync && typeof window.NutriScanSync.sendMealToCloud === 'function') {
+                        window.NutriScanSync.sendMealToCloud(allMeals[idx]);
+                    }
+                    closeModal('modal-meal-details');
+                    showToast(`Updated "${newName}"`);
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                }
+            };
+        }
+
+        renderLucide();
         openModal('modal-meal-details');
     }
 
@@ -2612,15 +2730,7 @@
         const btnExport = document.getElementById('btn-export-report');
         if (btnExport) {
             btnExport.addEventListener('click', () => {
-                const report = {
-                    app: "NutriScanAI",
-                    user: Storage.getProfile(),
-                    goals: Storage.getGoals(),
-                    exportedAt: new Date().toISOString(),
-                    meals: Storage.getMeals()
-                };
-                downloadJSON(report, `nutriscanai_report_${getTodayDateString(0)}.json`);
-                showToast('NutriScanAI summary downloaded!');
+                openModal('modal-export-report');
             });
         }
     }
@@ -3071,6 +3181,25 @@
                 openModal('modal-add-meal');
             });
         }
+
+        // 1-Click Food Presets for Manual Logging
+        document.querySelectorAll('.meal-preset-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const nameEl = document.getElementById('manual-meal-name');
+                const typeEl = document.getElementById('manual-meal-type');
+                const calEl = document.getElementById('manual-meal-calories');
+                const pEl = document.getElementById('manual-meal-protein');
+                const cEl = document.getElementById('manual-meal-carbs');
+                const fEl = document.getElementById('manual-meal-fat');
+
+                if (nameEl) nameEl.value = chip.getAttribute('data-name') || '';
+                if (typeEl) typeEl.value = chip.getAttribute('data-type') || 'Breakfast';
+                if (calEl) calEl.value = chip.getAttribute('data-cal') || '';
+                if (pEl) pEl.value = chip.getAttribute('data-p') || '';
+                if (cEl) cEl.value = chip.getAttribute('data-c') || '';
+                if (fEl) fEl.value = chip.getAttribute('data-f') || '';
+            });
+        });
 
         const btnSaveManual = document.getElementById('btn-save-manual-meal');
         if (btnSaveManual) {
@@ -3980,6 +4109,869 @@
     }
 
     // -------------------------------------------------------------
+    // EXPORT DIET DATA (CSV, JSON & PRINT)
+    // -------------------------------------------------------------
+    function initExportModal() {
+        const btnCsv = document.getElementById('btn-export-csv-action');
+        const btnJson = document.getElementById('btn-export-json-action');
+        const btnPrint = document.getElementById('btn-export-print-action');
+
+        if (btnCsv) {
+            btnCsv.addEventListener('click', () => {
+                const meals = Storage.getMeals();
+                if (!meals.length) {
+                    showToast('No meals logged yet to export.');
+                    closeModal('modal-export-report');
+                    return;
+                }
+
+                // CSV headers
+                let csv = 'ID,Date,Time,Type,Meal Name,Calories (kcal),Protein (g),Carbs (g),Fat (g),Fiber (g),Components\n';
+                meals.forEach(m => {
+                    const id = `"${(m.id || '').replace(/"/g, '""')}"`;
+                    const date = `"${(m.date || '').replace(/"/g, '""')}"`;
+                    const time = `"${(m.time || '').replace(/"/g, '""')}"`;
+                    const type = `"${(m.type || '').replace(/"/g, '""')}"`;
+                    const name = `"${(m.name || '').replace(/"/g, '""')}"`;
+                    const cal = Number(m.calories) || 0;
+                    const p = Number(m.protein) || 0;
+                    const c = Number(m.carbs) || 0;
+                    const f = Number(m.fat) || 0;
+                    const fib = Number(m.fiber) || 0;
+                    const comps = Array.isArray(m.components) 
+                        ? `"${m.components.map(cp => `${cp.name} (${cp.mass || 0}g)`).join('; ').replace(/"/g, '""')}"`
+                        : '""';
+                    csv += `${id},${date},${time},${type},${name},${cal},${p},${c},${f},${fib},${comps}\n`;
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `nutriscan_diet_log_${getTodayDateString(0)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                closeModal('modal-export-report');
+                showToast('Diet log CSV exported successfully!');
+            });
+        }
+
+        if (btnJson) {
+            btnJson.addEventListener('click', () => {
+                const report = {
+                    app: "NutriScanAI",
+                    exportedAt: new Date().toISOString(),
+                    profile: Storage.getProfile(),
+                    goals: Storage.getGoals(),
+                    water: Storage.getWater(),
+                    meals: Storage.getMeals()
+                };
+                downloadJSON(report, `nutriscan_backup_${getTodayDateString(0)}.json`);
+                closeModal('modal-export-report');
+                showToast('Full JSON backup downloaded!');
+            });
+        }
+
+        if (btnPrint) {
+            btnPrint.addEventListener('click', () => {
+                closeModal('modal-export-report');
+                switchView('reports');
+                setTimeout(() => {
+                    window.print();
+                }, 300);
+            });
+        }
+    }
+
+    // -------------------------------------------------------------
+    // NUTRIBOT AGENTIC AI ASSISTANT (OLLAMA QWEN3-VL:2B)
+    // -------------------------------------------------------------
+    const STORAGE_KEY_NUTRIBOT = 'nutriscan_nutribot_chat';
+    const nutribotActionsSnapshot = {};
+
+    function initNutriBot() {
+        const toggleBtn = document.getElementById('btn-nutribot-toggle');
+        const topbarBtn = document.getElementById('btn-topbar-nutribot');
+        const sidebarNav = document.getElementById('navitem-nutribot');
+        const closeBtn = document.getElementById('btn-nutribot-close');
+        const clearBtn = document.getElementById('btn-nutribot-clear');
+        const drawer = document.getElementById('nutribot-drawer');
+        const backdrop = document.getElementById('nutribot-backdrop');
+        const form = document.getElementById('nutribot-input-form');
+        const input = document.getElementById('nutribot-input');
+        const messagesContainer = document.getElementById('nutribot-messages');
+        const chipsContainer = document.getElementById('nutribot-chips-bar');
+
+        function openDrawer() {
+            if (drawer) drawer.classList.add('open');
+            if (backdrop) backdrop.classList.add('open');
+            updateNutriBotContextBar();
+            checkNutriBotStatus();
+            if (input) setTimeout(() => input.focus(), 150);
+            renderLucide();
+        }
+
+        function closeDrawer() {
+            if (drawer) drawer.classList.remove('open');
+            if (backdrop) backdrop.classList.remove('open');
+        }
+
+        if (toggleBtn) toggleBtn.addEventListener('click', () => {
+            if (drawer && drawer.classList.contains('open')) closeDrawer();
+            else openDrawer();
+        });
+        if (topbarBtn) topbarBtn.addEventListener('click', openDrawer);
+        if (sidebarNav) sidebarNav.addEventListener('click', openDrawer);
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+        if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+        // Escape key closes NutriBot drawer
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && drawer && drawer.classList.contains('open')) {
+                closeDrawer();
+            }
+        });
+
+        // Load chat history from localStorage or seed initial message
+        let chatHistory = [];
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_NUTRIBOT);
+            if (raw) chatHistory = JSON.parse(raw);
+        } catch (e) {
+            chatHistory = [];
+        }
+
+        if (!Array.isArray(chatHistory) || chatHistory.length === 0) {
+            chatHistory = [{
+                id: 'welcome',
+                role: 'assistant',
+                content: "Hello! I'm **NutriBot**, your AI Nutrition & Diary Assistant powered by local **Qwen3-VL:2B**.\n\nI can:\n• Suggest balanced meals to fit your remaining macros\n• Directly log water or meals (`'Log 300ml water'`)\n• Adjust your daily calorie or macro goals (`'Set protein to 120g'`)\n• Analyze your nutrition trends and give evidence-based advice.\n\nHow can I help you today?",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                action: null
+            }];
+            saveChatHistory();
+        }
+
+        function saveChatHistory() {
+            try {
+                localStorage.setItem(STORAGE_KEY_NUTRIBOT, JSON.stringify(chatHistory.slice(-40)));
+            } catch (e) {}
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                if (confirm('Clear chat history with NutriBot?')) {
+                    chatHistory = [{
+                        id: `msg-${Date.now()}`,
+                        role: 'assistant',
+                        content: "Chat cleared! I'm ready for your next question or command.",
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        action: null
+                    }];
+                    saveChatHistory();
+                    renderMessages();
+                    showToast('NutriBot chat history cleared');
+                }
+            });
+        }
+
+        function updateNutriBotContextBar() {
+            const goals = Storage.getGoals();
+            const water = Storage.getWater();
+            const todayStr = getTodayDateString(0);
+            const todaysMeals = Storage.getMeals().filter(m => m.date === todayStr);
+
+            let consumedKcal = 0;
+            let consumedProtein = 0;
+            todaysMeals.forEach(m => {
+                consumedKcal += Number(m.calories) || 0;
+                consumedProtein += Number(m.protein) || 0;
+            });
+
+            const targetKcal = goals.calories || 2000;
+            const targetProtein = goals.protein || 100;
+            const leftKcal = Math.max(0, targetKcal - consumedKcal);
+            const leftProtein = Math.max(0, targetProtein - consumedProtein);
+
+            const kcalValEl = document.getElementById('nb-ctx-kcal-val');
+            if (kcalValEl) kcalValEl.textContent = `${leftKcal.toLocaleString()} kcal left`;
+
+            const proteinValEl = document.getElementById('nb-ctx-protein-val');
+            if (proteinValEl) proteinValEl.textContent = `${leftProtein}g protein left`;
+
+            const waterValEl = document.getElementById('nb-ctx-water-val');
+            if (waterValEl) waterValEl.textContent = `${(water.ml / 1000).toFixed(1)}L water`;
+        }
+
+        async function checkNutriBotStatus() {
+            const dot = document.getElementById('nutribot-status-dot');
+            const modelName = document.getElementById('nutribot-model-name');
+            const floatIndicator = document.getElementById('nutribot-float-indicator');
+            try {
+                const res = await fetch(getApiEndpoint('/api/agent/status'));
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'online') {
+                        if (dot) dot.classList.remove('offline');
+                        if (floatIndicator) floatIndicator.style.background = '#10B981';
+                        if (modelName) modelName.textContent = data.model || 'qwen3-vl:2b';
+                        return;
+                    }
+                }
+            } catch (e) {}
+            if (dot) dot.classList.add('offline');
+            if (floatIndicator) floatIndicator.style.background = '#EF4444';
+            if (modelName) modelName.textContent = 'Ollama offline';
+        }
+
+        function formatMarkdown(text) {
+            if (!text) return '';
+            let html = escapeHTML(text);
+            // Bold **text**
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Italic *text*
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Inline code `code`
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            // Bullet points
+            const lines = html.split('\n');
+            let inList = false;
+            let result = '';
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ')) {
+                    if (!inList) {
+                        result += '<ul>';
+                        inList = true;
+                    }
+                    result += `<li>${line.substring(2)}</li>`;
+                } else {
+                    if (inList) {
+                        result += '</ul>';
+                        inList = false;
+                    }
+                    if (line) result += `<p>${line}</p>`;
+                }
+            }
+            if (inList) result += '</ul>';
+            return result || `<p>${html}</p>`;
+        }
+
+        function renderMessages() {
+            if (!messagesContainer) return;
+            messagesContainer.innerHTML = '';
+
+            chatHistory.forEach(msg => {
+                const isUser = msg.role === 'user';
+                const wrap = document.createElement('div');
+                wrap.className = `nutribot-bubble-wrap ${isUser ? 'user' : 'bot'}`;
+
+                const bubble = document.createElement('div');
+                bubble.className = 'nutribot-bubble';
+                bubble.innerHTML = isUser ? `<p>${escapeHTML(msg.content)}</p>` : formatMarkdown(msg.content);
+                wrap.appendChild(bubble);
+
+                // Render action card if present
+                if (msg.action && msg.action !== 'none' && msg.actionData) {
+                    const card = createActionCard(msg);
+                    wrap.appendChild(card);
+                }
+
+                const time = document.createElement('div');
+                time.className = 'nutribot-time';
+                time.textContent = msg.time || '';
+                wrap.appendChild(time);
+
+                messagesContainer.appendChild(wrap);
+            });
+
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            renderLucide();
+        }
+
+        function createActionCard(msg) {
+            const card = document.createElement('div');
+            card.className = 'nutribot-action-card';
+
+            let icon = 'sparkles';
+            let title = 'Action executed';
+            let sub = '';
+
+            switch (msg.action) {
+                case 'log_water':
+                    icon = 'droplet';
+                    title = `Logged ${msg.actionData.amount_ml || 250} mL Water`;
+                    sub = `Added to today's hydration total`;
+                    break;
+                case 'update_goals':
+                    icon = 'target';
+                    const parts = [];
+                    if (msg.actionData.calories) parts.push(`${msg.actionData.calories} kcal`);
+                    if (msg.actionData.protein) parts.push(`${msg.actionData.protein}g protein`);
+                    if (msg.actionData.carbs) parts.push(`${msg.actionData.carbs}g carbs`);
+                    if (msg.actionData.fat) parts.push(`${msg.actionData.fat}g fat`);
+                    title = `Updated Goals: ${parts.join(', ')}`;
+                    sub = `Daily targets adjusted`;
+                    break;
+                case 'update_preferences':
+                    icon = 'check-circle';
+                    title = `Updated Dietary Preferences`;
+                    sub = `Saved patterns and allergen filters`;
+                    break;
+                case 'log_meal':
+                    icon = 'utensils';
+                    title = `Logged Meal: "${msg.actionData.name || 'Meal'}"`;
+                    sub = `${msg.actionData.calories || 0} kcal · ${msg.actionData.meal_type || 'Snack'}`;
+                    break;
+                case 'navigate_view':
+                    icon = 'compass';
+                    title = `Switched to ${msg.actionData.view}`;
+                    sub = `Navigation action`;
+                    break;
+            }
+
+            const isUndone = msg.actionUndone === true;
+
+            card.innerHTML = `
+                <div class="nutribot-action-content">
+                    <div class="nutribot-action-icon"><i data-lucide="${icon}"></i></div>
+                    <div>
+                        <div class="nutribot-action-text">${escapeHTML(title)}</div>
+                        <div class="nutribot-action-sub">${escapeHTML(sub)}</div>
+                    </div>
+                </div>
+                <button type="button" class="nutribot-undo-btn ${isUndone ? 'undone' : ''}" data-msg-id="${msg.id}" ${isUndone ? 'disabled' : ''}>
+                    ${isUndone ? 'Undone' : 'Undo'}
+                </button>
+            `;
+
+            const undoBtn = card.querySelector('.nutribot-undo-btn');
+            if (undoBtn && !isUndone) {
+                undoBtn.onclick = () => undoAction(msg.id);
+            }
+
+            return card;
+        }
+
+        function executeAgentAction(action, data) {
+            const actionId = `act-${Date.now()}`;
+            switch (action) {
+                case 'log_water': {
+                    const currentWater = Storage.getWater().ml;
+                    const addAmount = Number(data.amount_ml) || 250;
+                    nutribotActionsSnapshot[actionId] = { type: 'water', previous: currentWater };
+                    Storage.saveWater(currentWater + addAmount);
+                    renderWaterTracker(Storage.getGoals().water || 2.5);
+                    updateNutriBotContextBar();
+                    renderDashboard();
+                    showToast(`💧 +${addAmount} mL water logged by NutriBot!`);
+                    break;
+                }
+                case 'update_goals': {
+                    const currentGoals = Storage.getGoals();
+                    nutribotActionsSnapshot[actionId] = { type: 'goals', previous: { ...currentGoals } };
+                    const updated = { ...currentGoals };
+                    if (data.calories) updated.calories = Number(data.calories);
+                    if (data.protein) updated.protein = Number(data.protein);
+                    if (data.carbs) updated.carbs = Number(data.carbs);
+                    if (data.fat) updated.fat = Number(data.fat);
+                    if (data.water) updated.water = Number(data.water);
+                    Storage.saveGoals(updated);
+                    renderGoals();
+                    renderDashboard();
+                    updateNutriBotContextBar();
+                    showToast(`🎯 Nutrition targets updated!`);
+                    break;
+                }
+                case 'update_preferences': {
+                    const currentGoals = Storage.getGoals();
+                    nutribotActionsSnapshot[actionId] = { 
+                        type: 'preferences', 
+                        previousPatterns: [...(currentGoals.dietaryPatterns || [])],
+                        previousAllergens: currentGoals.allergens || ''
+                    };
+                    const updated = { ...currentGoals };
+                    if (data.dietaryPatterns) updated.dietaryPatterns = data.dietaryPatterns;
+                    if (data.allergens !== undefined) updated.allergens = data.allergens;
+                    Storage.saveGoals(updated);
+                    renderGoals();
+                    showToast(`🥗 Dietary preferences updated!`);
+                    break;
+                }
+                case 'log_meal': {
+                    const newMeal = {
+                        id: `meal-bot-${Date.now()}`,
+                        name: data.name || "Logged Meal",
+                        type: data.meal_type || "Snack",
+                        calories: Math.max(0, parseInt(data.calories, 10) || 300),
+                        protein: Math.max(0, parseFloat(data.protein) || 15),
+                        carbs: Math.max(0, parseFloat(data.carbs) || 35),
+                        fat: Math.max(0, parseFloat(data.fat) || 10),
+                        fiber: Math.max(0, parseFloat(data.fiber) || 4),
+                        date: getTodayDateString(0),
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        image: "assets/nourish-bowl.png",
+                        components: [{
+                            name: data.name || "Meal component",
+                            mass: 180,
+                            calories: Math.max(0, parseInt(data.calories, 10) || 300),
+                            p: Math.max(0, parseFloat(data.protein) || 15),
+                            c: Math.max(0, parseFloat(data.carbs) || 35),
+                            f: Math.max(0, parseFloat(data.fat) || 10)
+                        }]
+                    };
+                    nutribotActionsSnapshot[actionId] = { type: 'meal', mealId: newMeal.id };
+                    Storage.addMeal(newMeal);
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                    updateNutriBotContextBar();
+                    showToast(`🍽️ Logged "${newMeal.name}" to today's diary!`);
+                    break;
+                }
+                case 'navigate_view': {
+                    if (data.view) {
+                        nutribotActionsSnapshot[actionId] = { type: 'navigation', previousView: currentView };
+                        switchView(data.view);
+                    }
+                    break;
+                }
+            }
+            return actionId;
+        }
+
+        function undoAction(msgId) {
+            const msg = chatHistory.find(m => m.id === msgId);
+            if (!msg || !msg.actionSnapshotId) return;
+
+            const snapshot = nutribotActionsSnapshot[msg.actionSnapshotId];
+            if (!snapshot) {
+                showToast('Action cannot be undone (snapshot expired)');
+                return;
+            }
+
+            switch (snapshot.type) {
+                case 'water':
+                    Storage.saveWater(snapshot.previous);
+                    renderWaterTracker(Storage.getGoals().water || 2.5);
+                    updateNutriBotContextBar();
+                    renderDashboard();
+                    showToast('Water logging undone');
+                    break;
+                case 'goals':
+                    Storage.saveGoals(snapshot.previous);
+                    renderGoals();
+                    renderDashboard();
+                    updateNutriBotContextBar();
+                    showToast('Goal update undone');
+                    break;
+                case 'preferences':
+                    const current = Storage.getGoals();
+                    current.dietaryPatterns = snapshot.previousPatterns;
+                    current.allergens = snapshot.previousAllergens;
+                    Storage.saveGoals(current);
+                    renderGoals();
+                    showToast('Preferences update undone');
+                    break;
+                case 'meal':
+                    Storage.deleteMeal(snapshot.mealId);
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                    updateNutriBotContextBar();
+                    showToast('Meal log undone');
+                    break;
+                case 'navigation':
+                    if (snapshot.previousView) switchView(snapshot.previousView);
+                    break;
+            }
+
+            msg.actionUndone = true;
+            saveChatHistory();
+            renderMessages();
+        }
+
+        async function handleSendMessage(text) {
+            const content = text.trim();
+            if (!content) return;
+
+            const userMsgId = `user-${Date.now()}`;
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            chatHistory.push({
+                id: userMsgId,
+                role: 'user',
+                content: content,
+                time: timeStr
+            });
+            saveChatHistory();
+            renderMessages();
+
+            if (input) input.value = '';
+
+            // Show typing indicator
+            const typingWrap = document.createElement('div');
+            typingWrap.className = 'nutribot-bubble-wrap bot';
+            typingWrap.id = 'nutribot-typing-bubble';
+            typingWrap.innerHTML = `
+                <div class="nutribot-typing">
+                    <span class="nutribot-typing-dot"></span>
+                    <span class="nutribot-typing-dot"></span>
+                    <span class="nutribot-typing-dot"></span>
+                </div>
+            `;
+            messagesContainer.appendChild(typingWrap);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Prepare context
+            const profile = Storage.getProfile() || { name: 'NutriScan User', goal: 'Maintain health' };
+            const goals = Storage.getGoals();
+            const water = Storage.getWater();
+            const todayStr = getTodayDateString(0);
+            const todaysMeals = Storage.getMeals().filter(m => m.date === todayStr);
+
+            let consumedKcal = 0, consumedP = 0, consumedC = 0, consumedF = 0;
+            todaysMeals.forEach(m => {
+                consumedKcal += Number(m.calories) || 0;
+                consumedP += Number(m.protein) || 0;
+                consumedC += Number(m.carbs) || 0;
+                consumedF += Number(m.fat) || 0;
+            });
+
+            const contextPayload = {
+                profile,
+                goals,
+                today: {
+                    calories: consumedKcal,
+                    protein: consumedP,
+                    carbs: consumedC,
+                    fat: consumedF,
+                    waterMl: water.ml,
+                    remainingKcal: Math.max(0, (goals.calories || 2000) - consumedKcal),
+                    remainingProtein: Math.max(0, (goals.protein || 100) - consumedP),
+                    remainingCarbs: Math.max(0, (goals.carbs || 220) - consumedC),
+                    remainingFat: Math.max(0, (goals.fat || 65) - consumedF)
+                },
+                recentMeals: todaysMeals.map(m => ({ name: m.name, type: m.type, calories: m.calories }))
+            };
+
+            const recentHistory = chatHistory
+                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .slice(-8)
+                .map(m => ({ role: m.role, content: m.content }));
+
+            try {
+                const resp = await fetch(getApiEndpoint('/api/agent/chat'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: recentHistory,
+                        context: contextPayload
+                    })
+                });
+
+                const typingBubble = document.getElementById('nutribot-typing-bubble');
+                if (typingBubble) typingBubble.remove();
+
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    let errMsg = errData.detail || `Server error (${resp.status})`;
+                    if (resp.status === 504) {
+                        errMsg = "The local Qwen3-VL:2B model is taking longer to respond or loading into memory. Please try sending your query again in a few moments!";
+                    }
+                    chatHistory.push({
+                        id: `err-${Date.now()}`,
+                        role: 'assistant',
+                        content: `⚠️ **NutriBot Notice:** ${errMsg}`,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    });
+                    saveChatHistory();
+                    renderMessages();
+                    return;
+                }
+
+                const data = await resp.json();
+                const botMessage = data.message || "I've processed your request.";
+                const action = data.action || 'none';
+                const actionData = data.data || {};
+
+                let actionSnapshotId = null;
+                if (action !== 'none') {
+                    actionSnapshotId = executeAgentAction(action, actionData);
+                }
+
+                chatHistory.push({
+                    id: `bot-${Date.now()}`,
+                    role: 'assistant',
+                    content: botMessage,
+                    action: action,
+                    actionData: actionData,
+                    actionSnapshotId: actionSnapshotId,
+                    actionUndone: false,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+
+                saveChatHistory();
+                renderMessages();
+                updateNutriBotContextBar();
+
+            } catch (err) {
+                const typingBubble = document.getElementById('nutribot-typing-bubble');
+                if (typingBubble) typingBubble.remove();
+
+                chatHistory.push({
+                    id: `err-${Date.now()}`,
+                    role: 'assistant',
+                    content: `⚠️ **Connection Error:** Could not reach the NutriBot agent server. Make sure \`start_services.ps1\` and Ollama are running locally (\`http://127.0.0.1:11434\`).`,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+                saveChatHistory();
+                renderMessages();
+            }
+        }
+
+        if (form) {
+            form.addEventListener('submit', e => {
+                e.preventDefault();
+                if (input) handleSendMessage(input.value);
+            });
+        }
+
+        if (input) {
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(input.value);
+                }
+            });
+        }
+
+        // Quick prompt chips
+        if (chipsContainer) {
+            chipsContainer.querySelectorAll('.nutribot-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const prompt = chip.getAttribute('data-prompt');
+                    if (prompt) handleSendMessage(prompt);
+                });
+            });
+        }
+
+        // Initial render & checks
+        renderMessages();
+        updateNutriBotContextBar();
+        checkNutriBotStatus();
+    }
+
+    // -------------------------------------------------------------
+    // COMMAND PALETTE (CTRL+K / CMD+K)
+    // -------------------------------------------------------------
+    function initCommandPalette() {
+        const modal = document.getElementById('modal-command-palette');
+        const input = document.getElementById('cmd-palette-input');
+        const results = document.getElementById('cmd-palette-results');
+        const quickSearchBtn = document.getElementById('btn-quick-search');
+
+        let selectedIndex = 0;
+        let currentItems = [];
+
+        function openPalette() {
+            openModal('modal-command-palette');
+            if (input) {
+                input.value = '';
+                setTimeout(() => input.focus(), 100);
+            }
+            renderResults('');
+        }
+
+        function closePalette() {
+            closeModal('modal-command-palette');
+        }
+
+        if (quickSearchBtn) {
+            quickSearchBtn.addEventListener('click', openPalette);
+        }
+
+        // Global hotkey: Ctrl+K / Cmd+K
+        window.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+                e.preventDefault();
+                const isOpen = modal && modal.classList.contains('open');
+                if (isOpen) closePalette();
+                else openPalette();
+            }
+        });
+
+        const commandCatalog = [
+            // Views
+            { id: 'view-dash', title: 'Dashboard', sub: 'Today’s calories, macros, streak & water', category: 'Views', icon: 'layout-dashboard', action: () => switchView('dashboard') },
+            { id: 'view-scan', title: 'Food Scanner', sub: 'Dual-view AI segmentation & portion estimation', category: 'Views', icon: 'camera', action: () => switchView('scanner') },
+            { id: 'view-hist', title: 'Meal History', sub: 'Browse past meals, search & edit entries', category: 'Views', icon: 'clock', action: () => switchView('history') },
+            { id: 'view-rep', title: 'Diet Reports', sub: '7/14/30 day macro breakdowns & calorie trends', category: 'Views', icon: 'bar-chart-2', action: () => switchView('reports') },
+            { id: 'view-goals', title: 'Goals & Targets', sub: 'Adjust calorie budget, macro ratio & diet patterns', category: 'Views', icon: 'target', action: () => switchView('goals') },
+            { id: 'view-prof', title: 'Profile & Settings', sub: 'Biometrics, Gemini AI key pool & preferences', category: 'Views', icon: 'user', action: () => switchView('profile') },
+
+            // Quick Actions
+            { id: 'act-bot', title: 'Chat with NutriBot AI', sub: 'Open autonomous Qwen3-VL:2B nutrition assistant', category: 'Actions', icon: 'bot', action: () => {
+                const drawer = document.getElementById('nutribot-drawer');
+                const backdrop = document.getElementById('nutribot-backdrop');
+                if (drawer) drawer.classList.add('open');
+                if (backdrop) backdrop.classList.add('open');
+            }},
+            { id: 'act-water-250', title: 'Log 250 mL Water', sub: 'Add a standard cup to today’s intake', category: 'Actions', icon: 'droplet', action: () => {
+                const current = Storage.getWater().ml;
+                Storage.saveWater(current + 250);
+                renderWaterTracker(Storage.getGoals().water || 2.5);
+                showToast('+250 mL water logged!');
+            }},
+            { id: 'act-water-500', title: 'Log 500 mL Water', sub: 'Add a full water bottle', category: 'Actions', icon: 'droplet', action: () => {
+                const current = Storage.getWater().ml;
+                Storage.saveWater(current + 500);
+                renderWaterTracker(Storage.getGoals().water || 2.5);
+                showToast('+500 mL water logged!');
+            }},
+            { id: 'act-manual-meal', title: 'Add Manual Meal', sub: 'Log food without scanning a photo', category: 'Actions', icon: 'plus-circle', action: () => openModal('modal-add-meal') },
+            { id: 'act-export', title: 'Export Diet Data', sub: 'Download CSV spreadsheet, JSON, or print', category: 'Actions', icon: 'download', action: () => openModal('modal-export-report') },
+            { id: 'act-theme', title: 'Toggle Light / Dark Theme', sub: 'Switch visual contrast theme', category: 'Actions', icon: 'moon', action: () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+                const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', nextTheme);
+                localStorage.setItem(STORAGE_KEY_THEME, nextTheme);
+                showToast(`Switched to ${nextTheme} mode`);
+            }},
+            { id: 'act-sync', title: 'Cloud Sync & Account', sub: 'Connect Supabase database vault', category: 'Actions', icon: 'cloud', action: () => window.nutriScanOpenAuthModal() }
+        ];
+
+        function renderResults(query) {
+            if (!results) return;
+            const q = (query || '').trim().toLowerCase();
+
+            // Filter static commands
+            let matchedCommands = commandCatalog.filter(c => {
+                if (!q) return true;
+                return c.title.toLowerCase().includes(q) || c.sub.toLowerCase().includes(q) || c.category.toLowerCase().includes(q);
+            });
+
+            // Filter meals
+            const allMeals = Storage.getMeals();
+            let matchedMeals = [];
+            if (q) {
+                matchedMeals = allMeals.filter(m => {
+                    const name = (m.name || '').toLowerCase();
+                    const type = (m.type || '').toLowerCase();
+                    return name.includes(q) || type.includes(q);
+                }).slice(0, 5).map(m => ({
+                    id: `meal-${m.id}`,
+                    title: m.name,
+                    sub: `${m.type} · ${m.calories} kcal · ${m.date}`,
+                    category: 'Meals in Diary',
+                    icon: 'utensils',
+                    action: () => openMealDetails(m.id)
+                }));
+            }
+
+            currentItems = [...matchedCommands, ...matchedMeals];
+            if (selectedIndex >= currentItems.length) selectedIndex = 0;
+
+            if (currentItems.length === 0) {
+                results.innerHTML = `
+                    <div style="text-align: center; padding: 24px 12px; color: var(--muted); font-size: 13px;">
+                        No commands or meals found matching "<strong>${escapeHTML(query)}</strong>"
+                    </div>
+                `;
+                return;
+            }
+
+            // Group by category
+            const groups = {};
+            currentItems.forEach((item, idx) => {
+                if (!groups[item.category]) groups[item.category] = [];
+                groups[item.category].push({ item, idx });
+            });
+
+            let html = '';
+            for (const cat of Object.keys(groups)) {
+                html += `<div class="cmd-group-title">${escapeHTML(cat)}</div>`;
+                groups[cat].forEach(({ item, idx }) => {
+                    const isSel = idx === selectedIndex;
+                    html += `
+                        <div class="cmd-item ${isSel ? 'selected' : ''}" data-cmd-index="${idx}">
+                            <div class="cmd-item-left">
+                                <div class="cmd-item-icon"><i data-lucide="${item.icon}"></i></div>
+                                <div>
+                                    <div class="cmd-item-text">${escapeHTML(item.title)}</div>
+                                    <div class="cmd-item-sub">${escapeHTML(item.sub)}</div>
+                                </div>
+                            </div>
+                            <span class="cmd-item-badge">Jump ↵</span>
+                        </div>
+                    `;
+                });
+            }
+
+            results.innerHTML = html;
+
+            // Wire click listeners
+            results.querySelectorAll('.cmd-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.getAttribute('data-cmd-index'), 10);
+                    if (currentItems[idx]) {
+                        closePalette();
+                        currentItems[idx].action();
+                    }
+                });
+            });
+
+            renderLucide();
+        }
+
+        if (input) {
+            input.addEventListener('input', e => {
+                selectedIndex = 0;
+                renderResults(e.target.value);
+            });
+
+            input.addEventListener('keydown', e => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (currentItems.length > 0) {
+                        selectedIndex = (selectedIndex + 1) % currentItems.length;
+                        updateSelection();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (currentItems.length > 0) {
+                        selectedIndex = (selectedIndex - 1 + currentItems.length) % currentItems.length;
+                        updateSelection();
+                    }
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (currentItems[selectedIndex]) {
+                        closePalette();
+                        currentItems[selectedIndex].action();
+                    }
+                }
+            });
+        }
+
+        function updateSelection() {
+            if (!results) return;
+            const items = results.querySelectorAll('.cmd-item');
+            items.forEach(el => {
+                const idx = parseInt(el.getAttribute('data-cmd-index'), 10);
+                if (idx === selectedIndex) {
+                    el.classList.add('selected');
+                    el.scrollIntoView({ block: 'nearest' });
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+        }
+    }
+
+    // -------------------------------------------------------------
     // INITIALIZATION ON DOM READY
     // -------------------------------------------------------------
     document.addEventListener('DOMContentLoaded', () => {
@@ -3999,6 +4991,9 @@
         initProfileEvents();
         initModals();
         initPasswordMeter();
+        initExportModal();
+        initNutriBot();
+        initCommandPalette();
 
         // Initial view load
         switchView('dashboard');

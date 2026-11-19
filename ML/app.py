@@ -504,6 +504,165 @@ async def direct_vision_endpoint(request: Request):
 
 
 # ─────────────────────────────────────────────────────────────
+# 4. AGENTIC NUTRIBOT CHAT & PREFERENCES ROUTER (OLLAMA QWEN3-VL:2B)
+# ─────────────────────────────────────────────────────────────
+OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA_AGENT_MODEL = os.getenv("OLLAMA_AGENT_MODEL", "qwen3-vl:2b")
+
+@app.get("/api/agent/status", tags=["Agent"], summary="Check Ollama and Qwen3-VL availability")
+async def get_agent_status():
+    """Verify connectivity to local Ollama server and verify qwen3-vl:2b model availability."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            if resp.status_code == 200:
+                data = resp.json()
+                models = [m.get("name", "").split(":")[0] for m in data.get("models", [])]
+                has_qwen = any("qwen3-vl" in m or "qwen" in m for m in models)
+                return {
+                    "status": "online",
+                    "ollama_url": OLLAMA_BASE_URL,
+                    "model": OLLAMA_AGENT_MODEL,
+                    "model_available": has_qwen,
+                    "installed_models": [m.get("name") for m in data.get("models", [])]
+                }
+            return {"status": "degraded", "error": f"Ollama HTTP {resp.status_code}"}
+    except Exception as exc:
+        return {"status": "offline", "error": str(exc), "hint": "Run 'ollama serve' in background"}
+
+
+@app.post("/api/agent/chat", tags=["Agent"], summary="Interact with Agentic NutriBot via local Qwen3-VL")
+async def chat_with_agent(request: Request):
+    """
+    Agentic assistant powered by local Ollama qwen3-vl:2b.
+    Understands user profile, daily macro budget, dietary patterns, and triggers in-app state mutations.
+    """
+    import json
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    user_messages = body.get("messages", [])
+    context = body.get("context", {})
+
+    if not user_messages:
+        raise HTTPException(status_code=422, detail="Messages array cannot be empty")
+
+    # Construct concise contextual agent prompt (optimized for 2B edge model throughput)
+    profile = context.get("profile", {})
+    goals = context.get("goals", {})
+    daily = context.get("today", {})
+    recent_meals = context.get("recentMeals", [])
+
+    diet_str = ', '.join(goals.get('dietaryPatterns', [])) or 'None'
+    allergens_str = goals.get('allergens', 'None')
+    recent_str = ', '.join([m.get('name', 'Meal') for m in recent_meals]) or 'None'
+
+    context_summary = (
+        f"User: {profile.get('name', 'User')}, Goal: {profile.get('goal', 'Health')}. "
+        f"Daily Targets: {goals.get('calories', 2000)}kcal, {goals.get('protein', 100)}g P, {goals.get('water', 2.5)}L water. "
+        f"Consumed: {daily.get('calories', 0)}kcal, {daily.get('protein', 0)}g P, {daily.get('waterMl', 0)}mL water. "
+        f"Remaining: {daily.get('remainingKcal', 2000)}kcal, {daily.get('remainingProtein', 100)}g P. "
+        f"Diet: {diet_str}. Allergens: {allergens_str}. Recent: {recent_str}."
+    )
+
+    system_instruction = f"""You are NutriBot, an AI nutrition assistant for NutriScanAI.
+{context_summary}
+
+Respond in concise, valid JSON with:
+{{
+  "message": "<Warm, conversational response in 1-2 sentences>",
+  "action": "none" | "log_water" | "update_goals" | "update_preferences" | "log_meal" | "navigate_view",
+  "data": {{ ... }}
+}}
+
+Examples:
+User: "Drank 300ml water"
+JSON: {{"message": "Logged 300 mL of water. Keep staying hydrated!", "action": "log_water", "data": {{"amount_ml": 300}}}}
+
+User: "Set protein to 120g"
+JSON: {{"message": "Updated your protein target to 120g.", "action": "update_goals", "data": {{"protein": 120}}}}
+
+User: "What should I eat for dinner?"
+JSON: {{"message": "With your remaining calories, a grilled chicken bowl with veggies or steamed tofu and greens would balance your macros.", "action": "none", "data": {{}}}}
+"""
+
+    ollama_messages = [{"role": "system", "content": system_instruction}]
+    for msg in user_messages:
+        role = msg.get("role", "user")
+        if role in ("user", "assistant"):
+            ollama_messages.append({"role": role, "content": msg.get("content", "")})
+
+    payload = {
+        "model": OLLAMA_AGENT_MODEL,
+        "messages": ollama_messages,
+        "stream": False,
+        "format": "json",
+        "options": {
+            "num_predict": 160,
+            "temperature": 0.2
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Ollama returned HTTP {resp.status_code}: {resp.text[:200]}")
+
+            raw_content = resp.json().get("message", {}).get("content", "{}")
+            cleaned = raw_content.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            try:
+                parsed = json.loads(cleaned)
+            except Exception:
+                parsed = {"message": raw_content.strip(), "action": "none", "data": {}}
+
+            action = parsed.get("action", "none")
+            data = parsed.get("data", {})
+            msg = (parsed.get("message") or "").strip()
+
+            if not msg:
+                if action == "log_water":
+                    msg = f"Logged {data.get('amount_ml', 250)} mL of water to your daily tracker!"
+                elif action == "update_goals":
+                    msg = "Adjusted your nutritional targets."
+                elif action == "update_preferences":
+                    msg = "Saved your dietary preferences and allergen filters."
+                elif action == "log_meal":
+                    msg = f"Logged '{data.get('name', 'Meal')}' ({data.get('calories', 0)} kcal) to today's diary."
+                elif action == "navigate_view":
+                    msg = f"Navigated to {data.get('view', 'dashboard')}."
+                else:
+                    msg = "I've reviewed your nutritional progress and updated your diary."
+
+            return {
+                "message": msg,
+                "action": action,
+                "data": data,
+                "model": OLLAMA_AGENT_MODEL,
+            }
+
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot connect to local Ollama on port 11434. Make sure Ollama is running ('ollama serve')."
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Ollama agent reasoning timed out (took >120s). Please try with a shorter query."
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Agent reasoning error ({type(exc).__name__}): {exc}")
+        raise HTTPException(status_code=500, detail=f"Agent reasoning error: {exc}")
+
+
+# ─────────────────────────────────────────────────────────────
 # 4. STATIC FRONTEND SERVING
 # ─────────────────────────────────────────────────────────────
 if FRONTEND_DIR.is_dir():

@@ -84,8 +84,33 @@ if ($GeminiKeyCount -gt 0) {
     Write-Host "     Vision service will use DeepLabV3+ geometric segmentation fallback until keys are added." -ForegroundColor DarkGray
 }
 
-# 4. Check & safely release ports 8000 and 8001
-Write-Host "`n[2/3] Checking ports 8000 and 8001..." -ForegroundColor Yellow
+# 4. Check Local Ollama Service for NutriBot AI Assistant (Qwen3-VL:2B)
+Write-Host "`n[2/4] Checking Ollama Agent Service (qwen3-vl:2b)..." -ForegroundColor Yellow
+$OllamaCandidate = "C:\Users\sazku\AppData\Local\Programs\Ollama\ollama.exe"
+if (-not (Test-Path -LiteralPath $OllamaCandidate)) {
+    $cmd = Get-Command "ollama" -ErrorAction SilentlyContinue
+    if ($cmd) { $OllamaCandidate = $cmd.Source }
+}
+
+$OllamaListening = $false
+try {
+    $tcp = Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue
+    if ($tcp) { $OllamaListening = $true }
+} catch {}
+
+if ($OllamaListening) {
+    Write-Host "  -> Ollama service is active and listening on port 11434 (Ready for NutriBot)." -ForegroundColor Green
+} elseif (Test-Path -LiteralPath $OllamaCandidate) {
+    Write-Host "  -> Launching Ollama in background ($OllamaCandidate serve)..." -ForegroundColor Cyan
+    Start-Process -FilePath $OllamaCandidate -ArgumentList "serve" -WindowStyle Hidden
+    Start-Sleep -Seconds 2
+    Write-Host "  -> Ollama launched successfully for NutriBot AI Assistant." -ForegroundColor Green
+} else {
+    Write-Host "  -> Ollama executable not found. Install from https://ollama.com to enable NutriBot AI." -ForegroundColor Yellow
+}
+
+# 5. Check & safely release ports 8000 and 8001
+Write-Host "`n[3/4] Checking ports 8000 and 8001..." -ForegroundColor Yellow
 $env:PYTHONUNBUFFERED = "1"
 @(8000, 8001) | ForEach-Object {
     $port = $_
@@ -105,8 +130,8 @@ $env:PYTHONUNBUFFERED = "1"
 }
 Start-Sleep -Seconds 1
 
-# 5. Prepare Logs Directory & Launch Services
-Write-Host "`n[3/3] Launching Services..." -ForegroundColor Yellow
+# 6. Prepare Logs Directory & Launch Services
+Write-Host "`n[4/4] Launching Services..." -ForegroundColor Yellow
 $LogsDir = Join-Path $MainProjectRoot "logs"
 if (-not (Test-Path -LiteralPath $LogsDir)) {
     New-Item -ItemType Directory -Path $LogsDir | Out-Null
@@ -133,6 +158,7 @@ Write-Host "=================================================================" -
 Write-Host "  * Frontend UI:             http://127.0.0.1:8000/" -ForegroundColor White
 Write-Host "  * Nutrition API Docs:      http://127.0.0.1:8000/docs" -ForegroundColor White
 Write-Host "  * Vision API Docs:         http://127.0.0.1:8001/docs" -ForegroundColor White
+Write-Host "  * NutriBot AI Agent:       http://127.0.0.1:11434 (qwen3-vl:2b)" -ForegroundColor White
 Write-Host "  * Logs Directory:          $LogsDir" -ForegroundColor White
 Write-Host "=================================================================" -ForegroundColor Green
 Write-Host "Press Ctrl+C to terminate both services." -ForegroundColor DarkGray

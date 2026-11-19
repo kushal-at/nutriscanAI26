@@ -51,6 +51,11 @@
                     <i data-lucide="user"></i>
                     <span>Profile & settings</span>
                 </div>
+                <div class="navitem" id="navitem-nutribot" title="Chat with NutriBot AI (Local Qwen3-VL)">
+                    <i data-lucide="bot"></i>
+                    <span>NutriBot AI</span>
+                    <span class="badge" style="font-size: 10px; margin-left: auto; background: var(--sage); color: var(--forest); font-weight: 700;">AI</span>
+                </div>
             </nav>
 
             <div class="sidebar-bottom">
@@ -90,11 +95,15 @@
                         <span id="backend-status-text">Backend Checking...</span>
                     </div>
 
+                    <button class="iconbtn" id="btn-topbar-nutribot" title="Chat with NutriBot AI (Local Qwen3-VL)">
+                        <i data-lucide="bot"></i>
+                    </button>
+
                     <button class="iconbtn" id="btn-theme-toggle" title="Toggle Light/Dark Theme">
                         <i data-lucide="moon" id="theme-toggle-icon"></i>
                     </button>
 
-                    <button class="iconbtn" id="btn-quick-search" title="Search meals">
+                    <button class="iconbtn" id="btn-quick-search" title="Command Palette & Search (Ctrl+K)">
                         <i data-lucide="search"></i>
                     </button>
 
@@ -975,6 +984,21 @@
                 <div class="modal-close" data-close-modal="modal-add-meal"><i data-lucide="x"></i></div>
             </div>
             <div class="modal-body">
+                <!-- 1-Click Quick Food Presets -->
+                <div style="margin-bottom: 14px;">
+                    <label class="form-label" style="font-size: 11px; margin-bottom: 6px; color: var(--forest); font-weight: 700;">
+                        <i data-lucide="zap" class="icon-xs"></i> Quick Presets (1-Click Fill)
+                    </label>
+                    <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none;">
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Boiled Eggs (2 pcs)" data-type="Breakfast" data-cal="156" data-p="12" data-c="1" data-f="10">🥚 2 Eggs</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Steamed White Rice (1 cup)" data-type="Lunch" data-cal="205" data-p="4" data-c="45" data-f="0">🍚 Rice</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Oatmeal with Honey" data-type="Breakfast" data-cal="180" data-p="6" data-c="32" data-f="3">🥣 Oatmeal</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Whey Protein Shake" data-type="Snack" data-cal="130" data-p="25" data-c="3" data-f="2">🥤 Whey</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Banana (Medium)" data-type="Snack" data-cal="105" data-p="1" data-c="27" data-f="0">🍌 Banana</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Whole Wheat Roti (2 pcs)" data-type="Dinner" data-cal="220" data-p="7" data-c="44" data-f="1">🫓 2 Roti</button>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label" for="manual-meal-name">Meal Name</label>
                     <input type="text" id="manual-meal-name" class="form-input" placeholder="e.g. Avocado Toast with Egg">
@@ -1022,12 +1046,12 @@
     <div class="modal-overlay" id="modal-meal-details">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="detail-modal-title">Meal Details</h3>
+                <h3 id="detail-meal-title">Meal Details</h3>
                 <div class="modal-close" data-close-modal="modal-meal-details"><i data-lucide="x"></i></div>
             </div>
             <div class="modal-body" style="padding-top: 14px;">
                 <img id="detail-meal-img" src="assets/nourish-bowl.png" style="width: 100%; height: 190px; object-fit: cover; border-radius: 14px;" alt="Meal photo">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                <div id="detail-view-header" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
                     <div>
                         <h2 id="detail-meal-name" style="font-size: 19px; font-weight: 800; margin: 0 0 2px;">Meal Name</h2>
                         <span class="tiny" id="detail-meal-time">Breakfast · 9:30 AM · Today</span>
@@ -1035,7 +1059,51 @@
                     <div class="meal-kcal" style="font-size: 24px;" id="detail-meal-kcal">420<small>kcal</small></div>
                 </div>
 
-                <div class="nutrient-grid" style="margin-top: 8px;">
+                <!-- Editable form (hidden by default) -->
+                <div id="detail-edit-form" style="display: none; margin-top: 12px; background: var(--pale); padding: 14px; border-radius: 12px; border: 1px solid var(--line);">
+                    <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px; color: var(--forest); display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="edit-3" class="icon-sm"></i> Edit Meal Details
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" for="edit-meal-name" style="font-size: 11px;">Meal Name</label>
+                        <input type="text" id="edit-meal-name" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-type" style="font-size: 11px;">Meal Type</label>
+                            <select id="edit-meal-type" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                                <option value="Breakfast">Breakfast</option>
+                                <option value="Lunch">Lunch</option>
+                                <option value="Dinner">Dinner</option>
+                                <option value="Snack">Snack</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-calories" style="font-size: 11px;">Calories (kcal)</label>
+                            <input type="number" id="edit-meal-calories" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-protein" style="font-size: 11px;">Protein (g)</label>
+                            <input type="number" id="edit-meal-protein" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-carbs" style="font-size: 11px;">Carbs (g)</label>
+                            <input type="number" id="edit-meal-carbs" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-fat" style="font-size: 11px;">Fat (g)</label>
+                            <input type="number" id="edit-meal-fat" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                        <button type="button" class="btn btn-sm btn-outline" id="btn-cancel-edit-meal">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-forest" id="btn-save-edit-meal">Save Changes</button>
+                    </div>
+                </div>
+
+                <div class="nutrient-grid" id="detail-nutrient-view" style="margin-top: 8px;">
                     <div class="nutrient">
                         <span>Protein</span>
                         <b id="detail-meal-p">24g</b>
@@ -1058,7 +1126,7 @@
                     </div>
                 </div>
 
-                <div style="margin-top: 8px;">
+                <div id="detail-components-wrap" style="margin-top: 8px;">
                     <b style="font-size: 12px; color: var(--ink-light);">Portions & Components</b>
                     <div class="table-responsive">
                         <table class="ingredient-table">
@@ -1075,11 +1143,21 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline" id="btn-detail-delete" style="color: #E24F43; border-color: #F6C8C4;">
-                    <i data-lucide="trash-2" class="icon-sm"></i> Delete Meal
-                </button>
-                <button class="btn" data-close-modal="modal-meal-details">Done</button>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-outline" id="btn-detail-delete" style="color: #E24F43; border-color: #F6C8C4;" title="Delete this meal">
+                        <i data-lucide="trash-2" class="icon-sm"></i> Delete
+                    </button>
+                    <button class="btn btn-outline" id="btn-detail-clone" title="Log this meal again today">
+                        <i data-lucide="copy" class="icon-sm"></i> Log Again
+                    </button>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-outline" id="btn-detail-edit" title="Edit meal details">
+                        <i data-lucide="edit-3" class="icon-sm"></i> Edit
+                    </button>
+                    <button class="btn" data-close-modal="modal-meal-details">Done</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1525,6 +1603,152 @@
             </div>
         </div>
     </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 13: COMMAND PALETTE (Ctrl+K)            -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-command-palette">
+        <div class="cmd-palette-box">
+            <div class="cmd-palette-search-wrap">
+                <i data-lucide="search" class="cmd-palette-search-icon"></i>
+                <input type="text" id="cmd-palette-input" class="cmd-palette-input" placeholder="Type a command, search meals, or jump to view..." autocomplete="off">
+                <span class="cmd-palette-esc-badge" data-close-modal="modal-command-palette">ESC</span>
+            </div>
+            <div class="cmd-palette-results" id="cmd-palette-results">
+                <!-- Dynamically populated commands & recent meals -->
+            </div>
+            <div class="cmd-palette-footer">
+                <span><kbd class="key-hint">↑</kbd> <kbd class="key-hint">↓</kbd> to navigate</span>
+                <span><kbd class="key-hint">↵</kbd> to select</span>
+                <span><kbd class="key-hint">esc</kbd> to close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 14: EXPORT DIET DATA CHOICES            -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-export-report">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: var(--sage); color: var(--forest);"><i data-lucide="download"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Export Diet Data</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-export-report"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <p class="tiny" style="color: var(--muted); margin-bottom: 14px;">Choose your preferred export format for meals, calories, macro breakdowns, and goals:</p>
+                <div class="export-options-grid">
+                    <div class="export-card" id="btn-export-csv-action">
+                        <div class="export-card-icon" style="background: rgba(87, 142, 37, 0.12); color: var(--forest);"><i data-lucide="table"></i></div>
+                        <div class="export-card-info">
+                            <b>CSV Spreadsheet (.csv)</b>
+                            <span class="tiny">Tabular meal logs for Microsoft Excel, Google Sheets, or Apple Numbers</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                    <div class="export-card" id="btn-export-json-action">
+                        <div class="export-card-icon" style="background: rgba(74, 144, 226, 0.12); color: var(--water-color);"><i data-lucide="file-code"></i></div>
+                        <div class="export-card-info">
+                            <b>Full JSON Backup (.json)</b>
+                            <span class="tiny">Raw complete data backup including portion weights, goals, and profile</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                    <div class="export-card" id="btn-export-print-action">
+                        <div class="export-card-icon" style="background: rgba(235, 203, 115, 0.2); color: #B38600;"><i data-lucide="printer"></i></div>
+                        <div class="export-card-info">
+                            <b>Print / PDF Nutrition Summary</b>
+                            <span class="tiny">Clean, presentation-ready printout for your doctor, dietitian, or coach</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-outline" data-close-modal="modal-export-report">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- NUTRIBOT AI AGENTIC DRAWER & FLOATING LAUNCHER -->
+    <!-- ============================================== -->
+    <div class="nutribot-backdrop" id="nutribot-backdrop"></div>
+    <aside class="nutribot-drawer" id="nutribot-drawer" aria-label="NutriBot AI Assistant">
+        <div class="nutribot-header">
+            <div class="nutribot-title-wrap">
+                <div class="nutribot-avatar-icon">
+                    <i data-lucide="bot"></i>
+                </div>
+                <div>
+                    <div class="nutribot-title-row">
+                        <h3 class="nutribot-title">NutriBot AI</h3>
+                        <span class="nutribot-model-badge" id="nutribot-model-badge">
+                            <span class="nutribot-status-dot" id="nutribot-status-dot"></span>
+                            <span id="nutribot-model-name">qwen3-vl:2b</span>
+                        </span>
+                    </div>
+                    <div class="nutribot-subtitle">Autonomous Nutrition & Diary Assistant</div>
+                </div>
+            </div>
+            <div class="nutribot-header-actions">
+                <button type="button" class="iconbtn-sm" id="btn-nutribot-clear" title="Clear Chat History">
+                    <i data-lucide="trash-2"></i>
+                </button>
+                <button type="button" class="iconbtn-sm" id="btn-nutribot-close" title="Close NutriBot">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Realtime Live Context Bar -->
+        <div class="nutribot-context-bar" id="nutribot-context-bar">
+            <div class="nutribot-context-item" id="nb-ctx-kcal" title="Remaining Daily Calorie Budget">
+                <i data-lucide="flame" class="icon-xs"></i>
+                <span id="nb-ctx-kcal-val">-- kcal left</span>
+            </div>
+            <div class="nutribot-context-item" id="nb-ctx-protein" title="Remaining Protein Target">
+                <i data-lucide="activity" class="icon-xs"></i>
+                <span id="nb-ctx-protein-val">--g protein</span>
+            </div>
+            <div class="nutribot-context-item" id="nb-ctx-water" title="Water Logged Today">
+                <i data-lucide="droplet" class="icon-xs"></i>
+                <span id="nb-ctx-water-val">--L water</span>
+            </div>
+        </div>
+
+        <!-- Chat Conversation Stream -->
+        <div class="nutribot-messages" id="nutribot-messages">
+            <!-- Dynamic message bubbles & action cards inserted here -->
+        </div>
+
+        <!-- Quick Prompt Chips -->
+        <div class="nutribot-chips-bar" id="nutribot-chips-bar">
+            <button type="button" class="nutribot-chip" data-prompt="What should I eat for dinner with my remaining calories?">🍽️ Dinner suggestion</button>
+            <button type="button" class="nutribot-chip" data-prompt="Log 250ml water for me">💧 Log 250ml water</button>
+            <button type="button" class="nutribot-chip" data-prompt="How are my macros looking today?">📊 Check macros</button>
+            <button type="button" class="nutribot-chip" data-prompt="Update my daily calorie goal to 2100 kcal">🎯 Set 2,100 kcal</button>
+        </div>
+
+        <!-- Input Form -->
+        <form class="nutribot-input-form" id="nutribot-input-form">
+            <textarea id="nutribot-input" class="nutribot-textarea" rows="1" placeholder="Ask NutriBot or command (e.g. 'Log 300ml water')..."></textarea>
+            <button type="submit" class="nutribot-send-btn" id="btn-nutribot-send" title="Send (Enter)">
+                <i data-lucide="send"></i>
+            </button>
+        </form>
+    </aside>
+
+    <!-- Floating Toggle Button -->
+    <button class="nutribot-float-btn" id="btn-nutribot-toggle" title="Chat with NutriBot AI">
+        <div class="nutribot-float-icon">
+            <i data-lucide="sparkles"></i>
+        </div>
+        <span class="nutribot-float-label">NutriBot</span>
+        <span class="nutribot-float-indicator" id="nutribot-float-indicator"></span>
+    </button>
 
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div class="toast-container" id="toast-container"></div>
