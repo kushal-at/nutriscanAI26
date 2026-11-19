@@ -119,8 +119,24 @@ if VISION_PROVIDER not in {"gemini", "qwen"}:
 
 logger = logging.getLogger("foodvision")
 
-# 1. Load PyTorch Segmenter
-segmenter, CLASS_NAMES, DEVICE = load_segmenter(SEGMENTER_PATH, LABELS_PATH)
+# 1. Load PyTorch Segmenter with Graceful Low-Memory Fallback (for 512MB environments like Render)
+segmenter = None
+CLASS_NAMES = {}
+DEVICE = "cpu"
+try:
+    skip_heavy = os.getenv("SKIP_HEAVY_SEGMENTER", "false").lower() == "true"
+    if not skip_heavy and SEGMENTER_PATH.is_file() and LABELS_PATH.is_file():
+        torch.set_num_threads(1)
+        segmenter, CLASS_NAMES, DEVICE = load_segmenter(SEGMENTER_PATH, LABELS_PATH)
+        logger.info("FoodSeg103 DeepLabV3+ loaded successfully on %s", DEVICE)
+    else:
+        logger.info("Lightweight metrology mode enabled (OpenCV 3D Depth + Gemini AI)")
+except Exception as exc:
+    logger.warning("Could not load FoodSeg103 segmenter (%s). Falling back to lightweight OpenCV metrology.", exc)
+    segmenter = None
+    CLASS_NAMES = {}
+    DEVICE = "cpu"
+
 DENSITY_TABLE = json.loads((ROOT / "food_density.json").read_text(encoding="utf-8"))
 
 
@@ -521,11 +537,15 @@ async def vision(
 
     # 2. DeepLabV3+ Semantic Segmentation with Spatial Cluster & Polygon Extraction
     def _run_top_segmentation():
+        if segmenter is None:
+            return [], [], 0, []
         return segmentation_summary_with_clusters(
             top_for_analysis, segmenter, DEVICE, CLASS_NAMES, FOODSEG_TILE_SIZE, CONFIDENCE
         )
 
     def _run_side_segmentation():
+        if segmenter is None or side is None:
+            return [], [], 0
         return segmentation_summary(
             side, segmenter, DEVICE, CLASS_NAMES, FOODSEG_TILE_SIZE, FOODSEG_TILE_OVERLAP, CONFIDENCE
         )

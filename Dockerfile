@@ -5,10 +5,12 @@
 
 FROM python:3.11-slim
 
-# Prevent Python from writing .pyc files and buffer stdout/stderr
+# Prevent Python from writing .pyc files, buffer stdout/stderr, and cap memory fragmentation
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
+    MALLOC_ARENA_MAX=2 \
+    OMP_NUM_THREADS=1 \
     PORT=7860
 
 WORKDIR /app
