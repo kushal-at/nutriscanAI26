@@ -30,6 +30,20 @@
     const BACKEND_BASE_URL = window.BACKEND_API_URL || resolveServiceUrl(8000);
     const VISION_BASE_URL = window.VISION_API_URL || resolveServiceUrl(8001);
 
+    function getApiEndpoint(path) {
+        if (window.BACKEND_API_URL) {
+            const base = window.BACKEND_API_URL.replace(/\/+$/, '');
+            return `${base}${path.startsWith('/') ? path : '/' + path}`;
+        }
+        if (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) {
+            const p = window.location.port;
+            if (p === '8000' || p === '7860' || p === '10000' || !p || window.location.hostname.includes('.hf.space') || window.location.hostname.includes('.onrender.com') || window.location.hostname.includes('.railway.app')) {
+                return path.startsWith('/') ? path : '/' + path;
+            }
+        }
+        return `${BACKEND_BASE_URL}${path.startsWith('/') ? path : '/' + path}`;
+    }
+
     // -------------------------------------------------------------
     // DEFAULT SEED DATA
     // -------------------------------------------------------------
@@ -414,8 +428,7 @@
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const healthUrl = isPort8000 ? "/health" : `${BACKEND_BASE_URL}/health`;
+            const healthUrl = getApiEndpoint("/health");
 
             const resp = await fetch(healthUrl, {
                 method: 'GET',
@@ -1216,8 +1229,7 @@
 
             // Strategy A: Try unified dual analysis endpoint on port 8000
             try {
-                const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-                const dualUrl = isPort8000 ? "/analyze/dual" : `${BACKEND_BASE_URL}/analyze/dual`;
+                const dualUrl = getApiEndpoint("/analyze/dual");
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 120000);
 
@@ -1268,8 +1280,7 @@
                             };
 
                             try {
-                                const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-                                const nutritionUrl = window.NUTRITION_API_URL || (isPort8000 ? "/predict/vision" : `${BACKEND_BASE_URL}/predict/vision`);
+                                const nutritionUrl = window.NUTRITION_API_URL || getApiEndpoint("/predict/vision");
                                 const mlResp = await fetch(nutritionUrl, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
@@ -1467,8 +1478,7 @@
 
         // 1. Attempt CatBoost prediction backend on port 8000
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const nutritionUrl = window.NUTRITION_API_URL || (isPort8000 ? "/predict/vision" : `${BACKEND_BASE_URL}/predict/vision`);
+            const nutritionUrl = window.NUTRITION_API_URL || getApiEndpoint("/predict/vision");
             const resp = await fetch(nutritionUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -3551,8 +3561,7 @@
         if (!descEl) return;
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const keysUrl = getApiEndpoint("/gemini/keys");
             const resp = await fetch(keysUrl, { method: 'GET' });
             if (resp.ok) {
                 const data = await resp.json();
@@ -3592,8 +3601,7 @@
         }
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const keysUrl = getApiEndpoint("/gemini/keys");
             const resp = await fetch(keysUrl);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
@@ -3687,8 +3695,7 @@
         }
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const keysUrl = getApiEndpoint("/gemini/keys");
             const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
             const headers = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -3722,8 +3729,7 @@
         showToast("Syncing keys from Supabase Cloud Vault...");
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const syncUrl = isPort8000 ? "/gemini/sync" : `${BACKEND_BASE_URL}/gemini/sync`;
+            const syncUrl = getApiEndpoint("/gemini/sync");
             const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
             const headers = {};
             if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -3747,8 +3753,7 @@
         if (!confirm(`Remove key ${identifier} from the router pool and Supabase vault?`)) return;
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const delUrl = isPort8000 ? `/gemini/keys/${encodeURIComponent(identifier)}` : `${BACKEND_BASE_URL}/gemini/keys/${encodeURIComponent(identifier)}`;
+            const delUrl = getApiEndpoint(`/gemini/keys/${encodeURIComponent(identifier)}`);
             const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
             const headers = {};
             if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -3773,8 +3778,7 @@
         const model = modelSelect.value;
 
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const url = isPort8000 ? "/gemini/model" : `${BACKEND_BASE_URL}/gemini/model`;
+            const url = getApiEndpoint("/gemini/model");
             const resp = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -3802,8 +3806,7 @@
 
         const startTime = performance.now();
         try {
-            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
-            const testUrl = isPort8000 ? "/gemini/test" : `${BACKEND_BASE_URL}/gemini/test`;
+            const testUrl = getApiEndpoint("/gemini/test");
             const resp = await fetch(testUrl, { method: "POST" });
             const data = await resp.json();
             const elapsed = Math.round(performance.now() - startTime);
