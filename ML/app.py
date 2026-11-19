@@ -130,11 +130,23 @@ async def lifespan(app: FastAPI):
     """
     Manages application lifespan resources:
     Establishes a shared httpx.AsyncClient with keep-alive, connection pooling, and proper timeouts.
+    Syncs Gemini keys from Supabase Cloud Vault on startup.
     """
     limits = httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=30.0)
     timeout = httpx.Timeout(180.0, connect=10.0)
     async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
         app.state.http_client = client
+
+        # Auto-sync Gemini keys from Supabase Cloud Vault into in-process router on startup
+        try:
+            from vision.gemini_router import gemini_router
+            synced = await gemini_router.sync_supabase()
+            import logging
+            logging.getLogger("uvicorn").info(f"Lifespan: synced {synced} Gemini keys from Supabase Cloud Vault")
+        except Exception as exc:
+            import logging
+            logging.getLogger("uvicorn").warning(f"Lifespan: Supabase key sync error: {exc}")
+
         yield
 
 

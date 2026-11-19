@@ -685,6 +685,12 @@ class GeminiKeyRouter:
         Tries keys sequentially until a success occurs or all available keys are exhausted.
         """
         if not self._keys:
+            try:
+                await self.sync_supabase()
+            except Exception as e:
+                logger.warning("On-demand Supabase key sync failed: %s", e)
+
+        if not self._keys:
             raise GeminiAllKeysExhaustedError("No Gemini API keys configured.")
 
         max_attempts = len(self._keys)
@@ -726,6 +732,23 @@ class GeminiKeyRouter:
                         data = resp.json()
                         self.report_success(key_obj)
                         return data, key_obj.masked
+
+                    # If model experienced temporary 503 high demand or 404, fallback to gemini-1.5-flash
+                    if resp.status_code in (404, 503) and self.model != FALLBACK_GEMINI_MODEL:
+                        fallback_url = f"{GEMINI_API_BASE_URL}/models/{FALLBACK_GEMINI_MODEL}:generateContent?key={key_obj.key}"
+                        logger.info("Attempting fallback model %s on key %s...", FALLBACK_GEMINI_MODEL, key_obj.masked)
+                        try:
+                            fb_resp = await client.post(
+                                fallback_url,
+                                json=payload,
+                                headers={"Content-Type": "application/json"},
+                            )
+                            if fb_resp.status_code == 200:
+                                data = fb_resp.json()
+                                self.report_success(key_obj)
+                                return data, key_obj.masked
+                        except Exception as fb_exc:
+                            logger.warning("Fallback model %s failed: %s", FALLBACK_GEMINI_MODEL, fb_exc)
 
                     # Non-200 response -> parse error message
                     err_text = resp.text
