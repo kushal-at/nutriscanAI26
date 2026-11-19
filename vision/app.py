@@ -25,7 +25,7 @@ import anyio
 import httpx
 import numpy as np
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 
@@ -140,6 +140,25 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def add_cors_pna_headers(request: Request, call_next):
+    """Handle Chrome/Edge Private Network Access preflights and ensure permissive CORS."""
+    if request.method == "OPTIONS":
+        response = Response(status_code=204)
+        origin = request.headers.get("origin", "*")
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = request.headers.get("access-control-request-headers", "*")
+        if "access-control-request-private-network" in request.headers:
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+    response = await call_next(request)
+    if "access-control-request-private-network" in request.headers:
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
 # Backward-compatibility wrappers
 def _segmentation_summary_compat(image: Image.Image):
     return segmentation_summary(image, segmenter, DEVICE, CLASS_NAMES, FOODSEG_TILE_SIZE, FOODSEG_TILE_OVERLAP, CONFIDENCE)
@@ -187,7 +206,7 @@ def reconcile_clusters_with_vlm(
             if cid in claimed_clusters:
                 continue
 
-            cl_label = cl["label"].lower()
+            cl_label = (cl.get("label") or cl.get("class") or "Food").lower()
             cl_frac = float(cl.get("area_fraction", 0.0))
 
             sim = 0.0
@@ -215,7 +234,7 @@ def reconcile_clusters_with_vlm(
 
     for cl in clusters:
         if "culinary_name" not in cl:
-            cl["culinary_name"] = cl["label"].title()
+            cl["culinary_name"] = (cl.get("label") or cl.get("class") or "Food").title()
 
 
 @app.get("/health")

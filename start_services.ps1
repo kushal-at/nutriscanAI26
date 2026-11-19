@@ -111,12 +111,12 @@ $NutritionErrLog = Join-Path $LogsDir "nutrition_stderr.log"
 Write-Host "  -> Redirecting unbuffered output logs to: $LogsDir" -ForegroundColor DarkGray
 
 # Start Vision API on Port 8001 (unbuffered)
-Write-Host "  -> Starting Vision Service on http://127.0.0.1:8001 (vision)..." -ForegroundColor Cyan
-$VisionProcess = Start-Process -FilePath $Python -ArgumentList "-u -m uvicorn app:app --host 127.0.0.1 --port 8001" -WorkingDirectory $VisionProjectRoot -RedirectStandardOutput $VisionOutLog -RedirectStandardError $VisionErrLog -PassThru
+Write-Host "  -> Starting Vision Service on port 8001 (vision)..." -ForegroundColor Cyan
+$VisionProcess = Start-Process -FilePath $Python -ArgumentList "-u -m uvicorn app:app --host 0.0.0.0 --port 8001 --timeout-keep-alive 65" -WorkingDirectory $VisionProjectRoot -RedirectStandardOutput $VisionOutLog -RedirectStandardError $VisionErrLog -PassThru
 
 # Start Nutrition & Frontend API on Port 8000 (unbuffered)
-Write-Host "  -> Starting Nutrition Service & Frontend on http://127.0.0.1:8000 (ML)..." -ForegroundColor Cyan
-$NutritionProcess = Start-Process -FilePath $Python -ArgumentList "-u -m uvicorn app:app --host 127.0.0.1 --port 8000" -WorkingDirectory $MainProjectRoot -RedirectStandardOutput $NutritionOutLog -RedirectStandardError $NutritionErrLog -PassThru
+Write-Host "  -> Starting Nutrition Service & Frontend on port 8000 (ML)..." -ForegroundColor Cyan
+$NutritionProcess = Start-Process -FilePath $Python -ArgumentList "-u -m uvicorn app:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 65" -WorkingDirectory $MainProjectRoot -RedirectStandardOutput $NutritionOutLog -RedirectStandardError $NutritionErrLog -PassThru
 
 Start-Sleep -Seconds 3
 

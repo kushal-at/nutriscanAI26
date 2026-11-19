@@ -345,6 +345,7 @@ def extract_spatial_clusters(
         clusters.append({
             "cluster_id": len(clusters) + 1,
             "class": dominant_name,
+            "label": dominant_name,
             "confidence": round(mean_conf, 3),
             "area_fraction": round(area_frac, 4),
             "area_percent": round(area_frac * 100, 2),

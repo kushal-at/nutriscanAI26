@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,6 +95,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_cors_pna_headers(request: Request, call_next):
+    """Handle Chrome/Edge Private Network Access preflights and ensure permissive CORS."""
+    if request.method == "OPTIONS":
+        response = Response(status_code=204)
+        origin = request.headers.get("origin", "*")
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = request.headers.get("access-control-request-headers", "*")
+        if "access-control-request-private-network" in request.headers:
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+    response = await call_next(request)
+    if "access-control-request-private-network" in request.headers:
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 
 @app.exception_handler(PredictionError)
@@ -255,11 +274,17 @@ async def analyze_dual(
         "food_hint": food_hint.strip() if food_hint else "",
     }
 
-    # Acquire shared HTTP client with connection pooling and keep-alive
+    # Acquire shared HTTP client with connection pooling and stale keep-alive retry
     client = getattr(app.state, "http_client", None)
+    v_resp = None
     try:
         if client is not None and not client.is_closed:
-            v_resp = await client.post(VISION_SERVICE_URL, files=files, data=data)
+            try:
+                v_resp = await client.post(VISION_SERVICE_URL, files=files, data=data)
+            except (httpx.RemoteProtocolError, httpx.WriteError, httpx.ReadError):
+                # Stale connection in keep-alive pool; retry once on a fresh connection
+                async with httpx.AsyncClient(timeout=180.0) as retry_client:
+                    v_resp = await retry_client.post(VISION_SERVICE_URL, files=files, data=data)
         else:
             async with httpx.AsyncClient(timeout=180.0) as temp_client:
                 v_resp = await temp_client.post(VISION_SERVICE_URL, files=files, data=data)

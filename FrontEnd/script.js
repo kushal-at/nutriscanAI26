@@ -15,8 +15,20 @@
     const STORAGE_KEY_WATER = 'nutriscan_water';
     const STORAGE_KEY_THEME = 'nutriscan_theme';
 
-    const BACKEND_BASE_URL = 'http://localhost:8000';
-    const VISION_BASE_URL = 'http://localhost:8001';
+    // Dynamic Origin Resolution: Binds cleanly to current window host (127.0.0.1, localhost, or LAN)
+    function resolveServiceUrl(defaultPort) {
+        if (typeof window !== 'undefined' && window.location) {
+            const proto = (window.location.protocol && window.location.protocol.startsWith('http')) 
+                ? window.location.protocol 
+                : 'http:';
+            const host = window.location.hostname || '127.0.0.1';
+            return `${proto}//${host}:${defaultPort}`;
+        }
+        return `http://127.0.0.1:${defaultPort}`;
+    }
+
+    const BACKEND_BASE_URL = window.BACKEND_API_URL || resolveServiceUrl(8000);
+    const VISION_BASE_URL = window.VISION_API_URL || resolveServiceUrl(8001);
 
     // -------------------------------------------------------------
     // DEFAULT SEED DATA
@@ -400,18 +412,23 @@
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-            await fetch(`${BACKEND_BASE_URL}/docs`, {
-                method: 'HEAD',
-                mode: 'no-cors',
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const healthUrl = isPort8000 ? "/health" : `${BACKEND_BASE_URL}/health`;
+
+            const resp = await fetch(healthUrl, {
+                method: 'GET',
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
 
-            backendOnline = true;
-            if (pillText) pillText.textContent = "AI Online";
-            if (pillDot) pillDot.classList.remove('offline');
+            backendOnline = resp.ok;
+            if (pillText) pillText.textContent = backendOnline ? "AI Online" : "Local Storage";
+            if (pillDot) {
+                if (backendOnline) pillDot.classList.remove('offline');
+                else pillDot.classList.add('offline');
+            }
         } catch (e) {
             backendOnline = false;
             if (pillText) pillText.textContent = "Local Storage";
@@ -1119,11 +1136,15 @@
         const plateDiameter = plateDiameterInput ? parseFloat(plateDiameterInput.value) || 25.0 : 25.0;
         const foodHint = scanFoodHintInput ? scanFoodHintInput.value.trim() : "";
 
-        const formData = new FormData();
-        formData.append("top_image", topFile);
-        if (sideFile) formData.append("side_image", sideFile);
-        formData.append("plate_diameter_cm", plateDiameter.toString());
-        if (foodHint) formData.append("food_hint", foodHint);
+        // Construct clean FormData on demand to prevent body stream reuse or abortion lockouts
+        function buildFormData() {
+            const fd = new FormData();
+            fd.append("top_image", topFile);
+            if (sideFile) fd.append("side_image", sideFile);
+            fd.append("plate_diameter_cm", plateDiameter.toString());
+            if (foodHint) fd.append("food_hint", foodHint);
+            return fd;
+        }
 
         if (analyzeButton) {
             analyzeButton.disabled = true;
@@ -1195,13 +1216,14 @@
 
             // Strategy A: Try unified dual analysis endpoint on port 8000
             try {
-                const dualUrl = `${BACKEND_BASE_URL}/analyze/dual`;
+                const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+                const dualUrl = isPort8000 ? "/analyze/dual" : `${BACKEND_BASE_URL}/analyze/dual`;
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 120000);
 
                 const resp = await fetch(dualUrl, {
                     method: "POST",
-                    body: formData,
+                    body: buildFormData(),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
@@ -1226,50 +1248,60 @@
 
             // Strategy B: If unified failed, try Vision (8001) then ML (8000)
             if (!combinedData) {
-                const visionUrl = window.VISION_API_URL || `${VISION_BASE_URL}/vision`;
-                const vController = new AbortController();
-                const vTimeout = setTimeout(() => vController.abort(), 120000);
+                try {
+                    const visionUrl = window.VISION_API_URL || `${VISION_BASE_URL}/vision`;
+                    const vController = new AbortController();
+                    const vTimeout = setTimeout(() => vController.abort(), 120000);
 
-                const vResp = await fetch(visionUrl, { method: "POST", body: formData, signal: vController.signal });
-                clearTimeout(vTimeout);
+                    const vResp = await fetch(visionUrl, { method: "POST", body: buildFormData(), signal: vController.signal });
+                    clearTimeout(vTimeout);
 
-                if (vResp.ok) {
-                    const visionData = await vResp.json();
-                    if (visionData.is_food === false) {
-                        combinedData = visionData;
-                    } else {
-                        const mlPayload = {
-                            dish: visionData.dish || foodHint || null,
-                            ingredients: visionData.ingredients || {},
-                            estimates: visionData.estimates || []
-                        };
-
-                        const nutritionUrl = window.NUTRITION_API_URL || `${BACKEND_BASE_URL}/predict/vision`;
-                        const mlResp = await fetch(nutritionUrl, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(mlPayload),
-                        });
-
-                        if (mlResp.ok) {
-                            const mlData = await mlResp.json();
-                            combinedData = {
-                                ...visionData,
-                                nutrition: mlData.nutrition,
-                                recipe_totals: mlData.recipe_totals,
-                            };
-                        } else {
+                    if (vResp.ok) {
+                        const visionData = await vResp.json();
+                        if (visionData.is_food === false) {
                             combinedData = visionData;
+                        } else {
+                            const mlPayload = {
+                                dish: visionData.dish || foodHint || null,
+                                ingredients: visionData.ingredients || {},
+                                estimates: visionData.estimates || []
+                            };
+
+                            try {
+                                const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+                                const nutritionUrl = window.NUTRITION_API_URL || (isPort8000 ? "/predict/vision" : `${BACKEND_BASE_URL}/predict/vision`);
+                                const mlResp = await fetch(nutritionUrl, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(mlPayload),
+                                });
+
+                                if (mlResp.ok) {
+                                    const mlData = await mlResp.json();
+                                    combinedData = {
+                                        ...visionData,
+                                        nutrition: mlData.nutrition,
+                                        recipe_totals: mlData.recipe_totals,
+                                    };
+                                } else {
+                                    combinedData = visionData;
+                                }
+                            } catch (errML) {
+                                console.warn("Prediction endpoint /predict/vision unavailable:", errML);
+                                combinedData = visionData;
+                            }
                         }
+                    } else if (vResp.status === 422) {
+                        const errData = await vResp.json().catch(() => ({}));
+                        combinedData = {
+                            is_food: false,
+                            dish: "Non-Food Image",
+                            reason: errData.detail || "Image unreadable or rejected by validation check",
+                            message: errData.detail || "The uploaded image could not be recognized as food. Please upload a clear photo of your meal."
+                        };
                     }
-                } else if (vResp.status === 422) {
-                    const errData = await vResp.json().catch(() => ({}));
-                    combinedData = {
-                        is_food: false,
-                        dish: "Non-Food Image",
-                        reason: errData.detail || "Image unreadable or rejected by validation check",
-                        message: errData.detail || "The uploaded image could not be recognized as food. Please upload a clear photo of your meal."
-                    };
+                } catch (errVision) {
+                    console.warn("Vision endpoint /vision unavailable:", errVision);
                 }
             }
 
@@ -1387,11 +1419,16 @@
             console.error("API error:", error);
             resultDiv.innerHTML = `
                 <div class="alert-error" style="background: rgba(239, 68, 68, 0.08); border: 1px solid #ef4444; border-radius: var(--r-md); padding: 18px 20px; margin: 16px 0; color: #991b1b;">
-                    <strong style="display:block; margin-bottom: 6px; font-size: 15px;">Connection error</strong>
+                    <strong style="display:block; margin-bottom: 6px; font-size: 15px;">Connection or Processing Notice</strong>
                     <p style="font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${escapeHTML(error.message || "Failed to reach vision/ML backend")}. Ensure the services are running on ports 8000 and 8001.</p>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="window.loadDemoAnalysis()" style="font-size: 12px; background: white;">
-                        ⚡ Run interactive demo analysis for this plate
-                    </button>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-sm btn-outline" onclick="window.loadDemoAnalysis()" style="font-size: 12px; background: white;">
+                            ⚡ Run interactive demo analysis for this plate
+                        </button>
+                        <button type="button" class="btn btn-sm btn-forest" onclick="analyzeFood()" style="font-size: 12px;">
+                            ↻ Retry analysis
+                        </button>
+                    </div>
                 </div>
             `;
         } finally {
@@ -1430,7 +1467,8 @@
 
         // 1. Attempt CatBoost prediction backend on port 8000
         try {
-            const nutritionUrl = window.NUTRITION_API_URL || `${BACKEND_BASE_URL}/predict/vision`;
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const nutritionUrl = window.NUTRITION_API_URL || (isPort8000 ? "/predict/vision" : `${BACKEND_BASE_URL}/predict/vision`);
             const resp = await fetch(nutritionUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
