@@ -130,6 +130,11 @@ Write-Host "  * Logs Directory:          $LogsDir" -ForegroundColor White
 Write-Host "=================================================================" -ForegroundColor Green
 Write-Host "Press Ctrl+C to terminate both services." -ForegroundColor DarkGray
 
+# Open default browser to Frontend UI
+try {
+    Start-Process "http://127.0.0.1:8000/" -ErrorAction SilentlyContinue
+} catch {}
+
 try {
     while ($true) {
         if ($VisionProcess.HasExited) {
