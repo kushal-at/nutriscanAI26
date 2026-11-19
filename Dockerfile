@@ -5,12 +5,13 @@
 
 FROM python:3.11-slim
 
-# Prevent Python from writing .pyc files, buffer stdout/stderr, and cap memory fragmentation
+# Prevent Python from writing .pyc files, buffer stdout/stderr, cap memory fragmentation, and default to lightweight metrology
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     MALLOC_ARENA_MAX=2 \
     OMP_NUM_THREADS=1 \
+    SKIP_HEAVY_SEGMENTER=true \
     PORT=7860
 
 WORKDIR /app

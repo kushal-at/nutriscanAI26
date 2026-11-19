@@ -25,7 +25,6 @@ from urllib.parse import urlparse
 import anyio
 import httpx
 import numpy as np
-import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
@@ -126,6 +125,7 @@ DEVICE = "cpu"
 try:
     skip_heavy = os.getenv("SKIP_HEAVY_SEGMENTER", "false").lower() == "true"
     if not skip_heavy and SEGMENTER_PATH.is_file() and LABELS_PATH.is_file():
+        import torch
         torch.set_num_threads(1)
         segmenter, CLASS_NAMES, DEVICE = load_segmenter(SEGMENTER_PATH, LABELS_PATH)
         logger.info("FoodSeg103 DeepLabV3+ loaded successfully on %s", DEVICE)

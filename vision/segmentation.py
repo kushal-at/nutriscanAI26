@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 vision/segmentation.py
 ======================
@@ -14,13 +15,14 @@ from typing import Any, Tuple, List, Dict, Optional
 
 import cv2
 import numpy as np
-import torch
 from PIL import Image
-import segmentation_models_pytorch as smp
 
 
-def load_segmenter(model_path: Path, labels_path: Path) -> Tuple[torch.nn.Module, Dict[int, str], torch.device]:
+def load_segmenter(model_path: Path, labels_path: Path) -> Tuple[Any, Dict[int, str], Any]:
     """Load PyTorch DeepLabV3+ MobileNetV2 model and 104-class label dictionary."""
+    import torch
+    import segmentation_models_pytorch as smp
+
     if not model_path.is_file():
         raise RuntimeError(f"FoodSeg103 weights not found: {model_path}")
     if not labels_path.is_file():
@@ -43,8 +45,8 @@ def load_segmenter(model_path: Path, labels_path: Path) -> Tuple[torch.nn.Module
 
 def segmentation_summary_letterbox(
     image: Image.Image,
-    segmenter: torch.nn.Module,
-    device: torch.device,
+    segmenter: Any,
+    device: Any,
     class_names: Dict[int, str],
     target_size: int = 512,
     confidence_thresh: float = 0.25,
@@ -60,6 +62,8 @@ def segmentation_summary_letterbox(
     5. Bilinearly interpolates continuous class probabilities to original resolution (W, H),
        preventing coarse nearest-neighbor blocky mask artifacts.
     """
+    import torch
+
     orig_w, orig_h = image.size
 
     # 1. Scale preserving aspect ratio so max dimension is target_size (512)
@@ -161,14 +165,16 @@ def segmentation_summary_letterbox(
 
 def segmentation_summary_tiled(
     image: Image.Image,
-    segmenter: torch.nn.Module,
-    device: torch.device,
+    segmenter: Any,
+    device: Any,
     class_names: Dict[int, str],
     tile_size: int = 512,
     overlap: int = 64,
     confidence_thresh: float = 0.25,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
     """Segment original-resolution image pixels using overlapping tiles (Rollback Strategy)."""
+    import torch
+
     width, height = image.size
     pixels = np.asarray(image, dtype=np.uint8)
     mean = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
@@ -261,8 +267,8 @@ def segmentation_summary_tiled(
 
 def segmentation_summary(
     image: Image.Image,
-    segmenter: torch.nn.Module,
-    device: torch.device,
+    segmenter: Any,
+    device: Any,
     class_names: Dict[int, str],
     tile_size: int = 512,
     overlap: int = 64,
@@ -433,8 +439,8 @@ def rectify_perspective_plate(
 
 def segmentation_summary_with_clusters(
     image: Image.Image,
-    segmenter: torch.nn.Module,
-    device: torch.device,
+    segmenter: Any,
+    device: Any,
     class_names: Dict[int, str],
     tile_size: int = 512,
     confidence_thresh: float = 0.25,

@@ -1258,10 +1258,10 @@
                 console.warn("/analyze/dual unavailable, attempting separate Vision + ML calls:", errDual);
             }
 
-            // Strategy B: If unified failed, try Vision (8001) then ML (8000)
+            // Strategy B: If unified failed, try Vision endpoint then ML
             if (!combinedData) {
                 try {
-                    const visionUrl = window.VISION_API_URL || `${VISION_BASE_URL}/vision`;
+                    const visionUrl = window.VISION_API_URL || getApiEndpoint("/vision");
                     const vController = new AbortController();
                     const vTimeout = setTimeout(() => vController.abort(), 120000);
 
@@ -1411,8 +1411,8 @@
                 // If neither endpoint responded (backend offline), offer intelligent fallback & demo
                 resultDiv.innerHTML = `
                     <div class="alert-error" style="background: rgba(239, 68, 68, 0.08); border: 1px solid #ef4444; border-radius: var(--r-md); padding: 18px 20px; margin: 16px 0; color: #991b1b;">
-                        <strong style="display:block; margin-bottom: 6px; font-size: 15px;">Backend Service Offline (Ports 8000 / 8001)</strong>
-                        <p style="font-size: 13px; line-height: 1.5; margin-bottom: 12px;">The Vision service (port 8001) and ML service (port 8000) are not actively responding. Start them via PowerShell (<code>.\\start_services.ps1</code>) or run standalone demo mode below.</p>
+                        <strong style="display:block; margin-bottom: 6px; font-size: 15px;">Backend Service Offline</strong>
+                        <p style="font-size: 13px; line-height: 1.5; margin-bottom: 12px;">The NutriScanAI service is temporarily unreachable or warming up. Please check your connection, retry in a moment, or run the interactive demo below.</p>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                             <button type="button" class="btn btn-sm btn-outline" onclick="window.loadDemoAnalysis()" style="font-size: 12px; background: white;">
                                 ⚡ Run interactive demo analysis for this plate

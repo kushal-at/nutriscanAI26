@@ -47,6 +47,7 @@ warnings.filterwarnings("ignore")
 
 FRONTEND_DIR = MODEL_DIR.parent / "FrontEnd"
 VISION_SERVICE_URL = os.getenv("VISION_SERVICE_URL", "http://127.0.0.1:8001/vision")
+VISION_BASE_URL = os.getenv("VISION_HOST", "http://127.0.0.1:8001").rstrip("/")
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024  # 25 MB max upload defense
 
 predictor = NutritionPredictor(MODEL_DIR)
@@ -55,6 +56,70 @@ predictor = NutritionPredictor(MODEL_DIR)
 catboost_models = predictor.catboost_models
 svd = predictor.svd
 vectorizer = predictor.vectorizer
+
+# In-process Vision ASGI transport fallback for unified cloud deployments (Render 512MB / Vercel / Railway)
+_in_proc_transport = None
+
+def _get_in_proc_transport():
+    global _in_proc_transport
+    if _in_proc_transport is None:
+        try:
+            from vision.app import app as vision_app
+            _in_proc_transport = httpx.ASGITransport(app=vision_app)
+        except Exception as exc:
+            import logging
+            logging.getLogger("uvicorn").error(f"In-process vision app initialization failed: {exc}")
+    return _in_proc_transport
+
+_external_vision_available = None
+
+async def _check_external_vision() -> bool:
+    global _external_vision_available
+    if _external_vision_available is not None:
+        return _external_vision_available
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(1.0, connect=0.5)) as test_c:
+            r = await test_c.get(f"{VISION_BASE_URL}/health")
+            _external_vision_available = (r.status_code == 200)
+    except Exception:
+        _external_vision_available = False
+    return _external_vision_available
+
+async def _dispatch_to_vision(method: str, path: str, **kwargs) -> httpx.Response:
+    """
+    Dispatch request to external Vision service on port 8001 if available;
+    otherwise seamlessly invoke vision_app in-process with ASGITransport.
+    """
+    global _external_vision_available
+    clean_path = path if path.startswith("/") else f"/{path}"
+    external_url = f"{VISION_BASE_URL}{clean_path}"
+    timeout = kwargs.pop("timeout", 180.0)
+
+    # If external vision port 8001 is known to be offline, bypass network call immediately
+    if await _check_external_vision():
+        client = getattr(app.state, "http_client", None)
+        try:
+            if client is not None and not client.is_closed:
+                try:
+                    return await client.request(method, external_url, timeout=timeout, **kwargs)
+                except (httpx.RemoteProtocolError, httpx.WriteError, httpx.ReadError):
+                    async with httpx.AsyncClient(timeout=timeout) as retry_client:
+                        return await retry_client.request(method, external_url, **kwargs)
+            else:
+                async with httpx.AsyncClient(timeout=timeout) as temp_client:
+                    return await temp_client.request(method, external_url, **kwargs)
+        except (httpx.ConnectError, httpx.TimeoutException, OSError):
+            _external_vision_available = False
+
+    # In-process fallback via ASGITransport
+    transport = _get_in_proc_transport()
+    if transport is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot connect to Vision API at {external_url} and in-process fallback unavailable."
+        )
+    async with httpx.AsyncClient(transport=transport, base_url="http://in-process", timeout=timeout) as in_proc_client:
+        return await in_proc_client.request(method, clean_path, **kwargs)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -274,32 +339,17 @@ async def analyze_dual(
         "food_hint": food_hint.strip() if food_hint else "",
     }
 
-    # Acquire shared HTTP client with connection pooling and stale keep-alive retry
-    client = getattr(app.state, "http_client", None)
-    v_resp = None
     try:
-        if client is not None and not client.is_closed:
-            try:
-                v_resp = await client.post(VISION_SERVICE_URL, files=files, data=data)
-            except (httpx.RemoteProtocolError, httpx.WriteError, httpx.ReadError):
-                # Stale connection in keep-alive pool; retry once on a fresh connection
-                async with httpx.AsyncClient(timeout=180.0) as retry_client:
-                    v_resp = await retry_client.post(VISION_SERVICE_URL, files=files, data=data)
-        else:
-            async with httpx.AsyncClient(timeout=180.0) as temp_client:
-                v_resp = await temp_client.post(VISION_SERVICE_URL, files=files, data=data)
+        v_resp = await _dispatch_to_vision("POST", "/vision", files=files, data=data, timeout=180.0)
         v_resp.raise_for_status()
         vision_data = v_resp.json()
-    except httpx.ConnectError:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Cannot connect to Vision API at {VISION_SERVICE_URL}. Ensure vision service is running on port 8001."
-        )
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=exc.response.status_code,
             detail=f"Vision API returned error: {exc.response.text[:300]}"
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Vision communication failure: {exc}")
 
@@ -385,37 +435,60 @@ async def analyze_dual(
 
 
 # ─────────────────────────────────────────────────────────────
-# 3. GEMINI KEY ROUTER REVERSE PROXY (PORT 8000 -> PORT 8001)
+# 3. GEMINI KEY ROUTER & VISION REVERSE PROXY / IN-PROCESS DISPATCH
 # ─────────────────────────────────────────────────────────────
 @app.api_route(
     "/gemini/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE"],
     tags=["Gemini Router"],
-    summary="Proxy Gemini API key management to Vision Service",
+    summary="Proxy Gemini API key management to Vision Service or in-process",
 )
 async def proxy_gemini_endpoint(path: str, request: Request):
-    """Proxy Gemini Key Router management requests to the Vision Service on port 8001."""
-    vision_base = os.getenv("VISION_HOST", "http://127.0.0.1:8001").rstrip("/")
-    url = f"{vision_base}/gemini/{path}"
-    client = getattr(app.state, "http_client", None)
-
+    """Proxy Gemini Key Router management requests to Vision service or in-process."""
     body = await request.body()
     headers = {k: v for k, v in request.headers.items() if k.lower() not in {"host", "content-length"}}
-
     try:
-        if client is not None and not client.is_closed:
-            resp = await client.request(request.method, url, content=body, headers=headers, timeout=25.0)
-        else:
-            async with httpx.AsyncClient(timeout=25.0) as temp_client:
-                resp = await temp_client.request(request.method, url, content=body, headers=headers)
-        return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
-    except httpx.ConnectError:
-        raise HTTPException(
-            status_code=503,
-            detail="Cannot connect to Vision Service on port 8001. Ensure Vision service is running."
+        resp = await _dispatch_to_vision(
+            request.method,
+            f"/gemini/{path}",
+            content=body,
+            headers=headers,
+            params=request.query_params,
+            timeout=30.0,
         )
+        return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Gemini proxy error: {exc}")
+
+
+@app.api_route(
+    "/vision",
+    methods=["POST", "OPTIONS"],
+    tags=["Vision"],
+    summary="Direct Food Vision API endpoint",
+)
+async def direct_vision_endpoint(request: Request):
+    """Directly proxy or execute /vision requests via port 8001 or in-process."""
+    if request.method == "OPTIONS":
+        return Response(status_code=204)
+    body = await request.body()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in {"host", "content-length"}}
+    try:
+        resp = await _dispatch_to_vision(
+            "POST",
+            "/vision",
+            content=body,
+            headers=headers,
+            params=request.query_params,
+            timeout=180.0,
+        )
+        return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Vision error: {exc}")
 
 
 # ─────────────────────────────────────────────────────────────
