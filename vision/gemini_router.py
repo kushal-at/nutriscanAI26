@@ -113,13 +113,15 @@ GEMINI_FOOD_SCHEMA: Dict[str, Any] = {
                 "type": "STRING",
                 "enum": ["flat", "low", "medium", "heaped"]
               },
+              "estimated_volume_ml": {"type": "NUMBER"},
+              "estimated_weight_g": {"type": "NUMBER"},
               "cluster_id": {"type": "INTEGER"},
               "submerged_ingredients": {
                 "type": "ARRAY",
                 "items": {"type": "STRING"}
               }
             },
-            "required": ["name", "fraction", "elevation"]
+            "required": ["name", "fraction", "elevation", "estimated_weight_g"]
           }
         }
     },
@@ -767,24 +769,53 @@ class GeminiKeyRouter:
         top_image_b64: str,
         plate_diameter_cm: float,
         side_image_b64: Optional[str] = None,
+        depth_map_b64: Optional[str] = None,
         food_hint: Optional[str] = None,
         priors_xml: Optional[str] = None,
         client: Optional[httpx.AsyncClient] = None,
     ) -> Dict[str, Any]:
         """
         End-to-End Multimodal Food Identification and Volumetric Decomposition via Gemini.
-        Passes overhead view (and optional horizontal side view) with structured JSON Schema.
+        Passes overhead view, calibrated 3D depth map, and optional horizontal side view
+        along with precise physical plate radius and metrology constraints.
         """
+        has_depth = bool(depth_map_b64)
         has_side = bool(side_image_b64 and side_image_b64 != top_image_b64)
 
+        plate_radius_cm = plate_diameter_cm / 2.0
+        plate_area_cm2 = 3.141592653589793 * (plate_radius_cm ** 2)
+
         prompt_parts = [
-            f"You are a professional culinary nutrition AI analyzing photos of a plated meal (plate diameter: {plate_diameter_cm:g} cm).",
-            "Image 1 is the OVERHEAD (TOP-DOWN) view showing the 2D surface layout and component boundaries.",
+            f"You are a professional culinary nutrition and volumetric AI analyzing photos of a plated meal.",
+            f"CALIBRATED PHYSICAL METROLOGY SCALE:\n"
+            f"- Plate radius: {plate_radius_cm:.1f} cm\n"
+            f"- Plate diameter: {plate_diameter_cm:g} cm\n"
+            f"- Total plate surface area: {plate_area_cm2:.1f} cm²\n\n"
+            f"IMAGES PROVIDED:\n"
+            f"- Image 1: OVERHEAD (TOP-DOWN) view showing visual textures, colors, and food boundaries.",
         ]
-        if has_side:
+        if has_depth:
             prompt_parts.append(
-                "Image 2 is the HORIZONTAL (SIDE-LEVEL) view showing vertical food elevation."
+                f"- Image 2: CALIBRATED 3D DEPTH & ELEVATION MAP (Turbo colormap) showing food elevation above plate base. "
+                f"Deep Blue = 0 cm (plate surface), Cyan/Green = 1.0-2.0 cm (flat/low elevation, thin roti, sauce), "
+                f"Yellow/Orange = 2.0-3.5 cm (medium mounds, curry bowl), Red/Bright = 4.0-5.0+ cm (heaped grain peaks). "
+                f"Includes marked plate radius line (r = {plate_radius_cm:.1f} cm)."
             )
+        if has_side:
+            side_img_idx = 3 if has_depth else 2
+            prompt_parts.append(
+                f"- Image {side_img_idx}: HORIZONTAL (SIDE-LEVEL) view showing the physical vertical profile and food heights."
+            )
+
+        prompt_parts.append(
+            "\nREALISTIC PORTION WEIGHT REFERENCE GUIDELINES (Calibrated for standard meal portions):\n"
+            "- Cooked Grains (Rice, Biryani, Pulao, Pasta, Noodles): A standard dinner portion covering ~30-50% of a 25cm plate weighs 180g - 300g (density ~0.85-0.95 g/ml, volume 200-350 ml). Never predict deflated values (e.g. 50g) for a main rice serving!\n"
+            "- Curries, Dals, and Stews (Dal Makhani, Sambar, Chicken Curry, Paneer): A standard portion or bowl on a plate weighs 120g - 200g (density ~1.0-1.1 g/ml, volume 120-180 ml).\n"
+            "- Meats & Poultry (Chicken pieces, Tandoori chicken, Fish, Mutton): 120g - 250g depending on piece count.\n"
+            "- Flatbreads: Phulka/Roti = 35g - 50g per piece; Naan/Paratha = 80g - 140g per piece.\n"
+            "- Cooked Vegetables & Sides (Sabzi, Poriyal, Aloo Gobi): 80g - 160g.\n"
+            "- Total full meal weight on a 25 cm plate typically ranges from 400g to 750g."
+        )
 
         if food_hint and food_hint.strip():
             prompt_parts.append(
@@ -801,12 +832,14 @@ class GeminiKeyRouter:
             "1. First verify if the image contains food, a meal, or edible items. "
             "If the photo shows non-food objects (e.g. animals, pets, electronics, vehicles, furniture, empty plate, clothing, documents, random non-food scene), "
             "set 'is_food': false, 'dish': 'Non-Food Item', 'side_view_observation': 'No food detected', 'components': [].\n"
-            "2. If food IS present: set 'is_food': true, identify the exact culinary dish name (e.g. Chicken Dum Biryani, Paneer Butter Masala with Naan, Steamed Rice with Dal, Grilled Chicken Salad).\n"
+            "2. If food IS present: set 'is_food': true, identify the exact culinary dish name (e.g. Chicken Dum Biryani, Paneer Butter Masala with Naan, Steamed Rice with Dal Makhani, Grilled Chicken Salad).\n"
             "3. Identify all distinct food components with their top-view surface area fractions summing to 1.0.\n"
             "4. For each component, specify:\n"
-            "   - 'name': culinary name (e.g. Rice, Dal, Chicken Curry, Roti, Salad, Paneer)\n"
+            "   - 'name': culinary name (e.g. Basmati Rice, Dal Makhani, Chicken Curry, Roti, Salad, Paneer)\n"
             "   - 'fraction': top-view surface area fraction (0.0 to 1.0)\n"
             "   - 'elevation': one of 'flat', 'low', 'medium', 'heaped'\n"
+            "   - 'estimated_volume_ml': realistic 3D volume in ml based on the depth map elevation, component area, and plate radius\n"
+            "   - 'estimated_weight_g': realistic culinary weight in grams (volume × bulk density), aligned with the reference guidelines\n"
             "   - 'cluster_id': matching cluster ID from visual segmentation priors if applicable\n"
             "   - 'submerged_ingredients': for composite curries/bowls, list submerged solids (e.g. [\"Chicken\"] or [\"Paneer\", \"Capsicum\"])\n"
             "5. If a side view is provided, observe it to assess overall vertical height.\n"
@@ -822,6 +855,13 @@ class GeminiKeyRouter:
                 }
             },
         ]
+        if has_depth and depth_map_b64:
+            user_parts.append({
+                "inlineData": {
+                    "mimeType": "image/jpeg",
+                    "data": depth_map_b64,
+                }
+            })
         if has_side and side_image_b64:
             user_parts.append({
                 "inlineData": {

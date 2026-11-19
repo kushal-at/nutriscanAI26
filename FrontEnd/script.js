@@ -2028,6 +2028,14 @@
             </span>
         ` : '';
 
+        const plateRadiusVal = (scale.plate_radius_cm || (scale.plate_diameter_cm ? (scale.plate_diameter_cm / 2.0).toFixed(1) : '12.5'));
+        const depthBtn = data.depth_map_b64 ? `
+            <button type="button" class="btn btn-sm btn-outline" onclick="window.nutriScanOpenDepthModal()" style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; color: #0284c7; border-color: rgba(2, 132, 199, 0.35); background: rgba(2, 132, 199, 0.06); cursor: pointer;" title="View calibrated 3D depth map sent to Gemini AI">
+                <i data-lucide="layers" style="width: 12px; height: 12px;"></i>
+                <span>3D Depth Map (r=${plateRadiusVal}cm)</span>
+            </button>
+        ` : '';
+
         // Combine into DOM
         resultDiv.innerHTML = `
             <div class="result-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
@@ -2036,6 +2044,7 @@
                     <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                         <span class="scale-badge">${plateText}</span>
                         ${providerBadge}
+                        ${depthBtn}
                     </div>
                 </div>
             </div>
@@ -3822,6 +3831,34 @@
         } finally {
             if (testBtn) testBtn.disabled = false;
         }
+    };
+
+    window.nutriScanOpenDepthModal = function () {
+        const data = window.currentAnalysisData;
+        if (!data || !data.depth_map_b64) {
+            showToast("No 3D depth map available for this plate.");
+            return;
+        }
+        const img = document.getElementById("depth-modal-img");
+        if (img) {
+            img.src = `data:image/jpeg;base64,${data.depth_map_b64}`;
+        }
+        const details = document.getElementById("depth-modal-details");
+        if (details) {
+            const meta = data.depth_meta || {};
+            const r = meta.plate_radius_cm || (data.scale_reference && data.scale_reference.plate_radius_cm) || 12.5;
+            const d = meta.plate_diameter_cm || (data.scale_reference && data.scale_reference.plate_diameter_cm) || 25.0;
+            const a = meta.plate_area_cm2 || (data.scale_reference && data.scale_reference.plate_physical_area_cm2) || 490.9;
+            const v = meta.total_integrated_volume_ml || "Calibrated";
+            details.innerHTML = `
+                <div style="font-weight: 700; color: var(--ink); margin-bottom: 6px;">📐 Calibrated Metrology Sent to Gemini Multimodal AI:</div>
+                <div>• <strong>Plate Radius:</strong> ${r} cm (Diameter: ${d} cm, Area: ${a} cm²)</div>
+                <div>• <strong>Integrated Food Volume:</strong> ~${v} ml across identified mounds</div>
+                <div>• <strong>Depth Colormap:</strong> 0.0 cm (Plate surface / Navy) → 5.0+ cm (Peak food elevation / Red)</div>
+            `;
+        }
+        openModal("modal-depth-map");
+        renderLucide();
     };
 
     // -------------------------------------------------------------

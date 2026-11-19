@@ -68,6 +68,7 @@ try:
         gemini_router,
         GeminiAllKeysExhaustedError,
     )
+    from vision.depth import generate_plate_depth_map
 except ModuleNotFoundError:
     from segmentation import (
         load_segmenter,
@@ -97,6 +98,7 @@ except ModuleNotFoundError:
         gemini_router,
         GeminiAllKeysExhaustedError,
     )
+    from depth import generate_plate_depth_map
 
 SEGMENTER_PATH = Path(os.getenv("FOODSEG_MODEL", ROOT / "models/FoodSeg103/best_model.pth"))
 LABELS_PATH = Path(os.getenv("FOODSEG_LABELS", ROOT / "models/FoodSeg103/labels_config.json"))
@@ -568,7 +570,17 @@ async def vision(
 
     segmented_at = time.perf_counter()
 
-    # 3. Keep FoodSeg for geometry only. It must not name foods for Qwen.
+    # 3. Generate calibrated 3D Depth & Elevation Map with Turbo colormap
+    depth_pil, depth_b64, depth_meta = await anyio.to_thread.run_sync(
+        generate_plate_depth_map,
+        top_for_analysis,
+        plate_scale,
+        clusters,
+        side if has_distinct_side else None,
+        plate_diameter_cm,
+        768,
+    )
+
     top_thumb_b64 = await anyio.to_thread.run_sync(get_vlm_thumbnail_b64, top_for_analysis, 768)
     side_thumb_b64 = (
         await anyio.to_thread.run_sync(get_vlm_thumbnail_b64, side, 768)
@@ -592,6 +604,7 @@ async def vision(
                 top_image_b64=top_thumb_b64,
                 plate_diameter_cm=plate_diameter_cm,
                 side_image_b64=side_thumb_b64,
+                depth_map_b64=depth_b64,
                 food_hint=food_hint,
                 priors_xml=priors_xml,
             )
@@ -860,9 +873,11 @@ async def vision(
         "dish": parsed["dish"],
         "ingredients": ingredient_totals,
         "estimates": estimates,
-        "scale_reference": {"plate_diameter_cm": plate_diameter_cm, **plate_scale},
+        "scale_reference": {"plate_diameter_cm": plate_diameter_cm, "plate_radius_cm": round(plate_diameter_cm / 2.0, 1), **plate_scale},
         "spatial_clusters": clusters,
         "side_view_observation": parsed.get("side_view_observation", ""),
+        "depth_map_b64": depth_b64,
+        "depth_meta": depth_meta,
         "vlm_provider": parsed.get("vlm_provider", "DeepLabV3+ Geometric Fallback" if vlm_failed else f"Gemini ({gemini_router.model})"),
         "vlm_key_used": parsed.get("vlm_key_used", "N/A"),
         "image_processing": {

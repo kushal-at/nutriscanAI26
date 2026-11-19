@@ -273,48 +273,72 @@ def build_weight_estimates(
         if vol_max <= 0.0 or vol_est <= 0.0:
             vol_min, vol_max, vol_est = 35.0, 75.0, 55.0
 
-        # Dynamic physical mass bounding based on volume * density
-        grams_min = max(5.0, vol_min * density["min"])
-        grams_max = max(grams_min, vol_max * density["max"])
-        estimate = max(5.0, vol_est * ((density["min"] + density["max"]) / 2.0))
-
-        w_est = max(5, round(estimate / 10) * 10)
-        w_min = max(5, round(grams_min / 10) * 10)
-        w_max = max(w_min, round(grams_max / 10) * 10)
-
-        # -------------------------------------------------------------
-        # Confidence Indicator Synthesis
-        # -------------------------------------------------------------
-        confidence_score = 0.50
-        if plate_scale.get("detected"):
-            confidence_score += 0.25
-            if plate_scale.get("confidence") == "high":
-                confidence_score += 0.10
-            elif plate_scale.get("confidence") == "medium":
-                confidence_score += 0.05
-            # Bonus for side-view height calibration
-            if side_used:
-                confidence_score += 0.10
-            # Bonus for physically constrained flat geometry
-            if geom_model.startswith("flat_sheet"):
-                confidence_score += 0.05
-        else:
-            confidence_score = 0.30
-
-        confidence_score = max(0.10, min(0.95, confidence_score))
-
-        if confidence_score >= 0.75:
+        # Check if multimodal AI (Gemini with depth map & plate radius) predicted realistic weight
+        ai_weight = item.get("estimated_weight_g")
+        ai_vol = item.get("estimated_volume_ml")
+        if ai_weight and isinstance(ai_weight, (int, float)) and ai_weight > 0:
+            w_est = max(5, round(float(ai_weight) / 5) * 5)
+            w_min = max(5, round(w_est * 0.85 / 5) * 5)
+            w_max = max(w_min, round(w_est * 1.15 / 5) * 5)
+            if ai_vol and isinstance(ai_vol, (int, float)) and ai_vol > 0:
+                vol_est = float(ai_vol)
+                vol_min = vol_est * 0.85
+                vol_max = vol_est * 1.15
+            else:
+                avg_dens = (density["min"] + density["max"]) / 2.0
+                vol_est = w_est / max(0.2, avg_dens)
+                vol_min = vol_est * 0.85
+                vol_max = vol_est * 1.15
+            geom_model = "multimodal_depth_ai"
+            method = (
+                f"Multimodal 3D Depth & Plate Metrology AI ({w_est}g based on "
+                f"{area_cm2:.1f} cm² footprint, depth map & plate radius)"
+            )
             confidence = "high"
-        elif confidence_score >= 0.45:
-            confidence = "medium"
+            confidence_score = 0.92
         else:
-            confidence = "low"
+            # Dynamic physical mass bounding based on volume * density
+            grams_min = max(5.0, vol_min * density["min"])
+            grams_max = max(grams_min, vol_max * density["max"])
+            estimate = max(5.0, vol_est * ((density["min"] + density["max"]) / 2.0))
 
-        # Downgrade if plate scale calibration explicitly indicated low confidence
-        if not plate_scale.get("detected"):
-            confidence = "low"
-        elif plate_scale.get("confidence") == "low" and confidence == "high":
-            confidence = "medium"
+            w_est = max(5, round(estimate / 10) * 10)
+            w_min = max(5, round(grams_min / 10) * 10)
+            w_max = max(w_min, round(grams_max / 10) * 10)
+
+            # -------------------------------------------------------------
+            # Confidence Indicator Synthesis
+            # -------------------------------------------------------------
+            confidence_score = 0.50
+            if plate_scale.get("detected"):
+                confidence_score += 0.25
+                if plate_scale.get("confidence") == "high":
+                    confidence_score += 0.10
+                elif plate_scale.get("confidence") == "medium":
+                    confidence_score += 0.05
+                # Bonus for side-view height calibration
+                if side_used:
+                    confidence_score += 0.10
+                # Bonus for physically constrained flat geometry
+                if geom_model.startswith("flat_sheet"):
+                    confidence_score += 0.05
+            else:
+                confidence_score = 0.30
+
+            confidence_score = max(0.10, min(0.95, confidence_score))
+
+            if confidence_score >= 0.75:
+                confidence = "high"
+            elif confidence_score >= 0.45:
+                confidence = "medium"
+            else:
+                confidence = "low"
+
+            # Downgrade if plate scale calibration explicitly indicated low confidence
+            if not plate_scale.get("detected"):
+                confidence = "low"
+            elif plate_scale.get("confidence") == "low" and confidence == "high":
+                confidence = "medium"
 
         estimates.append({
             "name": name,

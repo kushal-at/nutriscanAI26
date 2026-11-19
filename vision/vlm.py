@@ -384,6 +384,10 @@ def parse_component_response(text: str, plate_diameter_cm: float, has_side_view:
         }
         if "cluster_id" in item and isinstance(item["cluster_id"], int):
             comp_dict["cluster_id"] = item["cluster_id"]
+        if "estimated_weight_g" in item and isinstance(item["estimated_weight_g"], (int, float)):
+            comp_dict["estimated_weight_g"] = float(item["estimated_weight_g"])
+        if "estimated_volume_ml" in item and isinstance(item["estimated_volume_ml"], (int, float)):
+            comp_dict["estimated_volume_ml"] = float(item["estimated_volume_ml"])
         if "submerged_ingredients" in item and isinstance(item["submerged_ingredients"], list):
             sub_list = [
                 str(s).title().strip()

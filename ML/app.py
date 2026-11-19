@@ -379,6 +379,8 @@ async def analyze_dual(
         "vlm_key_used": vision_data.get("vlm_key_used", "N/A"),
         "image_processing": vision_data.get("image_processing", {}),
         "side_view_observation": vision_data.get("side_view_observation", ""),
+        "depth_map_b64": vision_data.get("depth_map_b64"),
+        "depth_meta": vision_data.get("depth_meta", {}),
     }
 
 

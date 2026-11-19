@@ -620,6 +620,8 @@ def detect_top_plate_scale(image: Image.Image, plate_diameter_cm: float, food_pi
             "reason": "plate rim partially visible or cropped; heuristic scale calibrated from photo bounds",
             "plate_diameter_px": round(estimated_diameter_px, 1),
             "minor_axis_px": round(estimated_diameter_px, 1),
+            "cx": round(float(cx0), 1),
+            "cy": round(float(cy0), 1),
             "aspect_ratio": 1.0,
             "tilt_angle_deg": 0.0,
             "pixels_per_cm": round(pixels_per_cm, 2),
@@ -681,11 +683,16 @@ def detect_top_plate_scale(image: Image.Image, plate_diameter_cm: float, food_pi
     else:
         confidence = "low"
 
+    detected_cx = ellipse_res["cx"] if use_ellipse else hough_res["cx"]
+    detected_cy = ellipse_res["cy"] if use_ellipse else hough_res["cy"]
+
     return {
         "detected": True,
         "confidence": confidence,
         "plate_diameter_px": round(diameter_px, 1),
         "minor_axis_px": round(minor_axis_px, 1),
+        "cx": round(float(detected_cx), 1),
+        "cy": round(float(detected_cy), 1),
         "aspect_ratio": round(aspect_ratio, 3),
         "tilt_angle_deg": round(tilt_angle_deg, 1),
         "pixels_per_cm": round(pixels_per_cm, 2),

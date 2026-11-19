@@ -1498,6 +1498,34 @@
         </div>
     </div>
 
+    <!-- ============================================== -->
+    <!-- MODAL 12: 3D DEPTH & ELEVATION MAP PREVIEW    -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-depth-map">
+        <div class="modal" style="max-width: 580px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: linear-gradient(135deg, #0284c7, #8b5cf6); color: white;"><i data-lucide="layers"></i></span>
+                    <div>
+                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">3D Depth & Elevation Map</h3>
+                        <span class="tiny" style="color: var(--muted);" id="depth-modal-subtitle">Calibrated plate metrology & height field</span>
+                    </div>
+                </div>
+                <div class="modal-close" data-close-modal="modal-depth-map" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px; text-align: center;">
+                <div style="border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #0b0f19; margin-bottom: 12px;">
+                    <img id="depth-modal-img" src="" alt="3D Depth Map" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
+                </div>
+                <div id="depth-modal-details" style="font-size: 12px; line-height: 1.6; text-align: left; color: var(--muted); background: var(--pale); padding: 12px; border-radius: 8px;">
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-sm btn-outline" data-close-modal="modal-depth-map">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div class="toast-container" id="toast-container"></div>
 
