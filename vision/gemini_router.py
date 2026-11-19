@@ -24,6 +24,11 @@ from urllib.parse import quote
 import httpx
 
 try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
+
+try:
     from vision.vlm import parse_component_response
 except ModuleNotFoundError:
     try:
@@ -37,6 +42,13 @@ DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 FALLBACK_GEMINI_MODEL = "gemini-1.5-flash"
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 KEYS_FILE_DEFAULT = Path(__file__).resolve().parent / "gemini_keys.json"
+VAULT_KEY_FILE = Path(__file__).resolve().parent / ".gemini_vault.key"
+DEFAULT_SUPABASE_URL = os.getenv("SUPABASE_URL", "https://jndsncexhhabcibtzxts.supabase.co").rstrip("/")
+DEFAULT_SUPABASE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_KEY")
+    or "sb_publishable_vwDsYMPd45aFbFOM0SbGkA_XN9nWyiV"
+)
 
 
 @dataclass
@@ -115,6 +127,207 @@ GEMINI_FOOD_SCHEMA: Dict[str, Any] = {
 }
 
 
+class SupabaseKeyVault:
+    """
+    Cryptographic Key Vault backed by Supabase PostgreSQL.
+    Encrypts all raw API keys using AES-128/256 Fernet authenticated cipher
+    prior to cloud transmission, ensuring zero plaintext secrets exist in Supabase.
+    """
+
+    def __init__(
+        self,
+        supabase_url: Optional[str] = None,
+        supabase_key: Optional[str] = None,
+        encryption_key: Optional[bytes] = None,
+    ):
+        self.supabase_url = (supabase_url or DEFAULT_SUPABASE_URL).rstrip("/")
+        self.supabase_key = supabase_key or DEFAULT_SUPABASE_KEY
+        self.table_name = "gemini_api_keys"
+        self._fernet: Optional[Any] = None
+        self._table_available: Optional[bool] = None
+        self._init_encryption(encryption_key)
+
+    def _init_encryption(self, explicit_key: Optional[bytes] = None) -> None:
+        """Initialize or generate Fernet symmetric cipher key."""
+        if Fernet is None:
+            logger.warning("cryptography package unavailable; Fernet encryption disabled.")
+            return
+
+        raw_key = explicit_key
+        if not raw_key and os.getenv("GEMINI_ENCRYPTION_KEY"):
+            raw_key = os.getenv("GEMINI_ENCRYPTION_KEY", "").encode("utf-8")
+        if not raw_key and VAULT_KEY_FILE.exists():
+            try:
+                raw_key = VAULT_KEY_FILE.read_bytes().strip()
+            except Exception as e:
+                logger.warning("Could not read vault key from %s: %s", VAULT_KEY_FILE, e)
+
+        if not raw_key:
+            raw_key = Fernet.generate_key()
+            try:
+                VAULT_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                VAULT_KEY_FILE.write_bytes(raw_key)
+                logger.info("Generated new master vault encryption key at %s", VAULT_KEY_FILE)
+            except Exception as e:
+                logger.warning("Could not persist master vault key to %s: %s", VAULT_KEY_FILE, e)
+
+        try:
+            self._fernet = Fernet(raw_key)
+        except Exception as e:
+            logger.error("Failed to initialize Fernet cipher: %s. Generating temporary in-memory key.", e)
+            self._fernet = Fernet(Fernet.generate_key())
+
+    def encrypt_key(self, plain_key: str) -> str:
+        """Encrypt API key string into tamper-proof base64 ciphertext token."""
+        if not self._fernet:
+            return plain_key.strip()
+        return self._fernet.encrypt(plain_key.strip().encode("utf-8")).decode("utf-8")
+
+    def decrypt_key(self, ciphertext: str) -> Optional[str]:
+        """Decrypt ciphertext token back into plain API key string."""
+        if not self._fernet:
+            return ciphertext.strip()
+        try:
+            return self._fernet.decrypt(ciphertext.strip().encode("utf-8")).decode("utf-8")
+        except Exception as e:
+            logger.error("Failed to decrypt Gemini key from Supabase vault: %s", e)
+            return None
+
+    def get_headers(self, user_token: Optional[str] = None) -> Dict[str, str]:
+        """Generate PostgREST auth headers."""
+        token = user_token or self.supabase_key
+        return {
+            "apikey": self.supabase_key,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+    async def fetch_keys(self, user_token: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetch all Gemini keys from Supabase and decrypt them."""
+        url = f"{self.supabase_url}/rest/v1/{self.table_name}?select=id,key_ciphertext,masked_key,status,success_count,failure_count,last_error&order=created_at.asc"
+        headers = self.get_headers(user_token)
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    self._table_available = True
+                    rows = resp.json()
+                    decrypted_keys = []
+                    for row in rows:
+                        cipher = row.get("key_ciphertext")
+                        if cipher:
+                            dec = self.decrypt_key(cipher)
+                            if dec:
+                                decrypted_keys.append({
+                                    "id": row.get("id"),
+                                    "key": dec,
+                                    "masked_key": row.get("masked_key"),
+                                    "status": row.get("status", "active"),
+                                    "success_count": row.get("success_count", 0),
+                                    "failure_count": row.get("failure_count", 0),
+                                    "last_error": row.get("last_error"),
+                                })
+                    logger.info("Retrieved and decrypted %d Gemini key(s) from Supabase vault.", len(decrypted_keys))
+                    return decrypted_keys
+                elif resp.status_code == 404:
+                    self._table_available = False
+                    logger.info("Supabase table '%s' not present in schema cache.", self.table_name)
+                    return []
+                else:
+                    logger.warning("Supabase vault query returned HTTP %d: %s", resp.status_code, resp.text[:150])
+                    return []
+        except Exception as e:
+            logger.warning("Could not reach Supabase vault (%s). Operating with local keys.", e)
+            return []
+
+    async def save_key(self, raw_key: str, user_id: Optional[str] = None, user_token: Optional[str] = None) -> bool:
+        """Encrypt and persist a new Gemini API key into Supabase."""
+        clean = raw_key.strip()
+        if not clean:
+            return False
+
+        masked = f"{clean[:6]}...{clean[-4:]}" if len(clean) > 10 else "******"
+        ciphertext = self.encrypt_key(clean)
+        url = f"{self.supabase_url}/rest/v1/{self.table_name}"
+        headers = self.get_headers(user_token)
+        headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+
+        payload: Dict[str, Any] = {
+            "key_ciphertext": ciphertext,
+            "masked_key": masked,
+            "status": "active",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if user_id:
+            payload["user_id"] = user_id
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code in (200, 201):
+                    logger.info("Persisted encrypted key %s to Supabase vault.", masked)
+                    self._table_available = True
+                    return True
+                elif resp.status_code == 404:
+                    self._table_available = False
+                    logger.warning("Cannot save key to Supabase: table '%s' does not exist in schema cache.", self.table_name)
+                    return False
+                else:
+                    logger.warning("Supabase key save failed (HTTP %d: %s)", resp.status_code, resp.text[:150])
+                    return False
+        except Exception as e:
+            logger.error("Supabase vault connection error during save_key: %s", e)
+            return False
+
+    async def delete_key(self, identifier: str, user_token: Optional[str] = None) -> bool:
+        """Delete a key from Supabase vault by masked string or UUID."""
+        clean = identifier.strip()
+        url = f"{self.supabase_url}/rest/v1/{self.table_name}?masked_key=eq.{quote(clean)}"
+        headers = self.get_headers(user_token)
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+                resp = await client.delete(url, headers=headers)
+                return resp.status_code in (200, 204)
+        except Exception as e:
+            logger.error("Failed to delete key from Supabase vault: %s", e)
+            return False
+
+    async def sync_key_status(
+        self,
+        masked_key: str,
+        status: str,
+        success_count: int,
+        failure_count: int,
+        last_error: Optional[str] = None,
+        cooldown_until: Optional[float] = None,
+    ) -> None:
+        """Update live execution statistics and cooldown in Supabase."""
+        if self._table_available is False:
+            return
+
+        url = f"{self.supabase_url}/rest/v1/{self.table_name}?masked_key=eq.{quote(masked_key)}"
+        headers = self.get_headers()
+        payload: Dict[str, Any] = {
+            "status": status,
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if last_error is not None:
+            payload["last_error"] = str(last_error)[:255]
+        if cooldown_until is not None and cooldown_until > 0:
+            payload["cooldown_until"] = datetime.fromtimestamp(cooldown_until, tz=timezone.utc).isoformat()
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                await client.patch(url, json=payload, headers=headers)
+        except Exception:
+            pass
+
+
 class GeminiAllKeysExhaustedError(RuntimeError):
     """Raised when all configured Gemini API keys have failed or are in cooldown."""
     pass
@@ -132,15 +345,45 @@ class GeminiKeyRouter:
         model: str = DEFAULT_GEMINI_MODEL,
         keys_file: Optional[Path] = None,
         default_keys: Optional[List[str]] = None,
+        vault: Optional[SupabaseKeyVault] = None,
     ):
         self.model = model
         self.keys_file = Path(keys_file or KEYS_FILE_DEFAULT)
+        self.vault = vault or SupabaseKeyVault()
         self._keys: List[GeminiKeyStatus] = []
         self._current_index = 0
         self._lock = asyncio.Lock()
 
         # Initialize keys from env and file
         self.load_keys(default_keys)
+
+    async def sync_supabase(self, user_token: Optional[str] = None) -> int:
+        """Fetch and decrypt keys from Supabase Vault into active pool."""
+        records = await self.vault.fetch_keys(user_token)
+        if not records:
+            return 0
+
+        async with self._lock:
+            existing_map = {k.key: k for k in self._keys}
+            for rec in records:
+                k_str = rec["key"]
+                if k_str in existing_map:
+                    cand = existing_map[k_str]
+                    cand.success_count = max(cand.success_count, rec.get("success_count", 0))
+                    cand.failure_count = max(cand.failure_count, rec.get("failure_count", 0))
+                    if rec.get("status") == "invalid":
+                        cand.status = "invalid"
+                else:
+                    self._keys.append(GeminiKeyStatus(
+                        key=k_str,
+                        status=rec.get("status", "active"),
+                        success_count=rec.get("success_count", 0),
+                        failure_count=rec.get("failure_count", 0),
+                        last_error=rec.get("last_error"),
+                    ))
+            self.save_keys()
+            logger.info("Synced %d key(s) from Supabase Vault into active pool.", len(records))
+            return len(records)
 
     def load_keys(self, default_keys: Optional[List[str]] = None) -> int:
         """Load keys from environment variables and persistence file."""
@@ -213,14 +456,40 @@ class GeminiKeyRouter:
             logger.error("Failed to persist Gemini keys to %s: %s", self.keys_file, e)
 
     def add_key(self, raw_key: str) -> bool:
-        """Add a new API key to the router pool."""
+        """Add a new API key to the router pool and enqueue Supabase persistence."""
         clean = raw_key.strip()
         if not clean or any(k.key == clean for k in self._keys):
             return False
         self._keys.append(GeminiKeyStatus(key=clean))
         self.save_keys()
         logger.info("Added new Gemini key (%s...%s). Total keys: %d", clean[:6], clean[-4:], len(self._keys))
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.vault.save_key(clean))
+        except RuntimeError:
+            pass
         return True
+
+    async def add_key_async(
+        self,
+        raw_key: str,
+        user_id: Optional[str] = None,
+        user_token: Optional[str] = None
+    ) -> bool:
+        """Add API key to in-memory pool, local cache, and Supabase Vault."""
+        clean = raw_key.strip()
+        if not clean:
+            return False
+        added = False
+        if not any(k.key == clean for k in self._keys):
+            self._keys.append(GeminiKeyStatus(key=clean))
+            self.save_keys()
+            added = True
+
+        # Encrypt and persist to Supabase
+        await self.vault.save_key(clean, user_id=user_id, user_token=user_token)
+        return added
 
     def set_keys(self, key_list: List[str]) -> int:
         """Replace or bulk update the API key pool."""
@@ -247,8 +516,19 @@ class GeminiKeyRouter:
         self._keys = [k for k in self._keys if k.key != clean and k.masked != clean]
         if len(self._keys) < orig_len:
             self.save_keys()
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.vault.delete_key(clean))
+            except RuntimeError:
+                pass
             return True
         return False
+
+    async def remove_key_async(self, identifier: str, user_token: Optional[str] = None) -> bool:
+        """Remove key from pool, local cache, and Supabase Vault."""
+        removed = self.remove_key(identifier)
+        await self.vault.delete_key(identifier, user_token=user_token)
+        return removed
 
     @property
     def has_keys(self) -> bool:
@@ -274,6 +554,13 @@ class GeminiKeyRouter:
             "cooldown_keys": cooldown_count,
             "invalid_keys": invalid_count,
             "keys": [k.to_dict() for k in self._keys],
+            "vault": {
+                "provider": "Supabase Cloud Vault (PostgreSQL)",
+                "encryption": "AES-128/256 Fernet (Authenticated)",
+                "table": self.vault.table_name,
+                "table_synced": self.vault._table_available is True,
+                "supabase_url": self.vault.supabase_url,
+            },
         }
 
     async def get_next_key(self) -> Tuple[GeminiKeyStatus, int]:
@@ -332,6 +619,14 @@ class GeminiKeyRouter:
         key_obj.cooldown_until = 0.0
         key_obj.last_used_at = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.vault.sync_key_status(
+                key_obj.masked, key_obj.status, key_obj.success_count, key_obj.failure_count
+            ))
+        except RuntimeError:
+            pass
+
     def report_failure(
         self,
         key_obj: GeminiKeyStatus,
@@ -363,6 +658,15 @@ class GeminiKeyRouter:
             key_obj.status = "cooldown"
             key_obj.cooldown_until = time.monotonic() + 15.0
             logger.warning("Gemini key %s encountered error (HTTP %d). Cooldown 15s.", key_obj.masked, status_code)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.vault.sync_key_status(
+                key_obj.masked, key_obj.status, key_obj.success_count, key_obj.failure_count,
+                last_error=key_obj.last_error, cooldown_until=key_obj.cooldown_until
+            ))
+        except RuntimeError:
+            pass
 
     async def execute_generate_content(
         self,

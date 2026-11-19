@@ -146,6 +146,21 @@
             return currentUser;
         },
 
+        getUserId() {
+            return currentUser ? currentUser.id : null;
+        },
+
+        async getToken() {
+            const client = getClient();
+            if (!client) return null;
+            try {
+                const { data } = await client.auth.getSession();
+                return data?.session?.access_token || null;
+            } catch (e) {
+                return null;
+            }
+        },
+
         isAuthenticated() {
             return currentUser !== null;
         }

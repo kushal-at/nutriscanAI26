@@ -201,3 +201,36 @@ create policy "Public read meal photos" on storage.objects
 drop policy if exists "Users delete their meal photos" on storage.objects;
 create policy "Users delete their meal photos" on storage.objects
     for delete using (bucket_id = 'meal-images' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ============================================================================
+-- 11. GEMINI API KEYS VAULT (ENCRYPTED MULTI-KEY POOL WITH FAILOVER)
+-- ============================================================================
+create table if not exists public.gemini_api_keys (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users(id) on delete cascade,
+    key_ciphertext text not null,
+    masked_key text not null unique,
+    label text default 'Gemini API Key',
+    status text not null default 'active' check (status in ('active', 'cooldown', 'invalid')),
+    cooldown_until timestamp with time zone,
+    success_count integer default 0 check (success_count >= 0),
+    failure_count integer default 0 check (failure_count >= 0),
+    last_error text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_gemini_keys_status on public.gemini_api_keys(status);
+create index if not exists idx_gemini_keys_user on public.gemini_api_keys(user_id);
+
+alter table public.gemini_api_keys enable row level security;
+
+-- Policy 1: Authenticated users can manage keys
+drop policy if exists "Users manage own gemini keys" on public.gemini_api_keys;
+create policy "Users manage own gemini keys" on public.gemini_api_keys
+    for all using (auth.uid() = user_id or user_id is null);
+
+-- Policy 2: Allow backend service access to shared/system keys
+drop policy if exists "Allow backend service access to gemini keys" on public.gemini_api_keys;
+create policy "Allow backend service access to gemini keys" on public.gemini_api_keys
+    for all using (true) with check (true);

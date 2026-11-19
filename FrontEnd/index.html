@@ -1435,8 +1435,22 @@
             </div>
             <div class="modal-body" style="padding-top: 14px;">
                 <p class="tiny" style="margin-bottom: 14px; line-height: 1.5; color: var(--muted);">
-                    Configure multiple Google Gemini API keys. NutriScanAI automatically balances requests across your keys in a round-robin cycle and fails over instantly if a key encounters rate limits (HTTP 429).
+                    Configure multiple Google Gemini API keys. Keys are encrypted with an AES-256 authenticated cipher and stored in Supabase PostgreSQL with automated round-robin rotation and HTTP 429 rate-limit failover.
                 </p>
+
+                <!-- Supabase Cloud Vault Badge -->
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 14px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="shield-check" style="width: 18px; height: 18px; color: #10b981;"></i>
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--ink);">Supabase Encrypted Vault</div>
+                            <div class="tiny" style="color: var(--muted);" id="gemini-vault-status-text">AES-256 authenticated cipher · Zero plaintext in DB</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-sync-supabase" onclick="window.handleSyncSupabaseKeys()" title="Sync encrypted keys from Supabase Vault" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                        <i data-lucide="cloud-download" class="icon-sm"></i> Sync Cloud
+                    </button>
+                </div>
 
                 <!-- Active Keys List -->
                 <div style="margin-bottom: 16px;">

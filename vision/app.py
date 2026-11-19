@@ -124,12 +124,19 @@ DENSITY_TABLE = json.loads((ROOT / "food_density.json").read_text(encoding="utf-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI Lifespan: initializes models and Gemini Key Pool."""
+    """FastAPI Lifespan: initializes models, Gemini Key Pool, and Supabase Vault."""
     logger.info("Initializing Food Vision service (DeepLabV3+ & Planar Metrology)...")
+    try:
+        synced = await gemini_router.sync_supabase()
+        if synced > 0:
+            logger.info("Synced %d Gemini key(s) from Supabase Cloud Vault.", synced)
+    except Exception as exc:
+        logger.warning("Supabase key sync deferred: %s", exc)
+
     status = gemini_router.get_pool_status()
     logger.info(
-        "Gemini Round-Robin Key Router online [Model=%s, Total Keys=%d, Active=%d]",
-        gemini_router.model, status["total_keys"], status["active_keys"]
+        "Gemini Round-Robin Key Router online [Model=%s, Total Keys=%d, Active=%d, Vault=%s]",
+        gemini_router.model, status["total_keys"], status["active_keys"], status["vault"]["provider"]
     )
     yield
     logger.info("Shutting down Food Vision service.")
@@ -307,7 +314,7 @@ async def get_gemini_keys() -> dict[str, Any]:
 @app.post("/gemini/keys")
 async def update_gemini_keys(request: Request) -> dict[str, Any]:
     """
-    Add or update keys in the Gemini Round-Robin pool.
+    Add or update keys in the Gemini Round-Robin pool and encrypt into Supabase Vault.
     Body formats accepted:
       {"keys": ["AIzaSy...", ...]}
       {"key": "AIzaSy..."}
@@ -317,6 +324,10 @@ async def update_gemini_keys(request: Request) -> dict[str, Any]:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    auth_header = request.headers.get("authorization", "")
+    user_token = auth_header.split(" ", 1)[1] if " " in auth_header else None
+    user_id = body.get("user_id")
 
     action = body.get("action", "add")
     keys_input = body.get("keys")
@@ -331,28 +342,48 @@ async def update_gemini_keys(request: Request) -> dict[str, Any]:
     added = 0
     if action == "replace":
         gemini_router.set_keys(keys_input)
+        for k in keys_input:
+            if isinstance(k, str) and k.strip():
+                await gemini_router.add_key_async(k.strip(), user_id=user_id, user_token=user_token)
     else:
         for k in keys_input:
             if isinstance(k, str) and k.strip():
-                if gemini_router.add_key(k.strip()):
+                if await gemini_router.add_key_async(k.strip(), user_id=user_id, user_token=user_token):
                     added += 1
 
     return {
         "status": "ok",
-        "message": f"Successfully updated Gemini key pool (added {added} new key(s)).",
+        "message": f"Successfully updated Gemini key pool & encrypted to Supabase (added {added} new key(s)).",
         "pool": gemini_router.get_pool_status(),
     }
 
 
 @app.delete("/gemini/keys/{identifier}")
-async def delete_gemini_key(identifier: str) -> dict[str, Any]:
-    """Remove a key from the pool by exact string or masked identifier."""
-    removed = gemini_router.remove_key(identifier)
+async def delete_gemini_key(identifier: str, request: Request) -> dict[str, Any]:
+    """Remove a key from the pool and Supabase vault by exact string or masked identifier."""
+    auth_header = request.headers.get("authorization", "")
+    user_token = auth_header.split(" ", 1)[1] if " " in auth_header else None
+
+    removed = await gemini_router.remove_key_async(identifier, user_token=user_token)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Key '{identifier}' not found in pool.")
     return {
         "status": "ok",
-        "message": f"Removed key '{identifier}' from pool.",
+        "message": f"Removed key '{identifier}' from pool and Supabase vault.",
+        "pool": gemini_router.get_pool_status(),
+    }
+
+
+@app.post("/gemini/sync")
+async def sync_gemini_keys_from_supabase(request: Request) -> dict[str, Any]:
+    """Sync and decrypt keys from Supabase Cloud Vault into the active pool."""
+    auth_header = request.headers.get("authorization", "")
+    user_token = auth_header.split(" ", 1)[1] if " " in auth_header else None
+    synced = await gemini_router.sync_supabase(user_token=user_token)
+    return {
+        "status": "ok",
+        "synced_count": synced,
+        "message": f"Synced {synced} key(s) from Supabase Cloud Vault.",
         "pool": gemini_router.get_pool_status(),
     }
 

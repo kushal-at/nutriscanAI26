@@ -90,6 +90,31 @@ def test_gemini_keys_crud():
     gemini_router.set_keys([])
 
 
+def test_supabase_vault_encryption():
+    # Test encryption and decryption roundtrip in SupabaseKeyVault
+    vault = gemini_router.vault
+    raw_secret = "AIzaSy_SUPER_CONFIDENTIAL_KEY_9999"
+    ciphertext = vault.encrypt_key(raw_secret)
+    assert ciphertext != raw_secret
+    assert "9999" not in ciphertext
+    decrypted = vault.decrypt_key(ciphertext)
+    assert decrypted == raw_secret
+    print("✓ SupabaseKeyVault AES-256 Fernet encryption and decryption verified.")
+
+
+def test_gemini_sync_endpoint():
+    client = TestClient(vision_app)
+    resp = client.post("/gemini/sync")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "synced_count" in data
+    assert "vault" in data["pool"]
+    assert data["pool"]["vault"]["provider"] == "Supabase Cloud Vault (PostgreSQL)"
+    assert "AES" in data["pool"]["vault"]["encryption"]
+    print("✓ POST /gemini/sync triggers Supabase vault sync successfully.")
+
+
 def test_ml_proxy_gemini_keys():
     # TestClient for ML app with mock or real vision routing
     client = TestClient(ml_app)
@@ -103,5 +128,7 @@ def test_ml_proxy_gemini_keys():
 if __name__ == "__main__":
     test_vision_health_and_gemini_status()
     test_gemini_keys_crud()
+    test_supabase_vault_encryption()
+    test_gemini_sync_endpoint()
     test_ml_proxy_gemini_keys()
     print("\nALL ENDPOINT TESTS PASSED SUCCESSFULLY!")

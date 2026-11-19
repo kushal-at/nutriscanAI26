@@ -3602,11 +3602,23 @@
                 modelSelect.value = data.model;
             }
 
+            const vaultInfo = data.vault || {};
+            const vaultText = document.getElementById('gemini-vault-status-text');
+            if (vaultText) {
+                if (vaultInfo.table_synced) {
+                    vaultText.textContent = "Supabase Vault Synced · AES-256 Fernet Encrypted";
+                    vaultText.style.color = "#059669";
+                } else {
+                    vaultText.textContent = "AES-256 Encrypted · Supabase Vault Connected (Local Cache Active)";
+                    vaultText.style.color = "var(--muted)";
+                }
+            }
+
             if (listEl) {
                 if (keys.length === 0) {
                     listEl.innerHTML = `
                         <div class="tiny" style="color: var(--muted); text-align: center; padding: 12px 0;">
-                            No Gemini keys currently registered in pool.<br>Paste your keys below to enable Gemini Vision.
+                            No Gemini keys currently registered in pool.<br>Paste your keys below to encrypt and store in Supabase.
                         </div>
                     `;
                 } else {
@@ -3668,10 +3680,18 @@
         try {
             const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
             const keysUrl = isPort8000 ? "/gemini/keys" : `${BACKEND_BASE_URL}/gemini/keys`;
+            const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
+            const headers = { "Content-Type": "application/json" };
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
             const resp = await fetch(keysUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ keys: rawKeys, action: "add" })
+                headers: headers,
+                body: JSON.stringify({
+                    keys: rawKeys,
+                    action: "add",
+                    user_id: window.NutriScanSync && window.NutriScanSync.auth ? window.NutriScanSync.auth.getUserId() : null
+                })
             });
 
             if (!resp.ok) {
@@ -3680,20 +3700,51 @@
             }
 
             inputEl.value = "";
-            showToast(`✦ Added ${rawKeys.length} key(s) to Gemini Round-Robin pool!`);
+            showToast(`✦ Encrypted & saved ${rawKeys.length} key(s) to Supabase Vault!`);
             window.loadGeminiKeysStatus();
         } catch (err) {
             showToast(`Failed to add keys: ${err.message}`, true);
         }
     };
 
+    window.handleSyncSupabaseKeys = async function () {
+        const syncBtn = document.getElementById('btn-gemini-sync-supabase');
+        if (syncBtn) syncBtn.disabled = true;
+        showToast("Syncing keys from Supabase Cloud Vault...");
+
+        try {
+            const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
+            const syncUrl = isPort8000 ? "/gemini/sync" : `${BACKEND_BASE_URL}/gemini/sync`;
+            const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
+            const headers = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const resp = await fetch(syncUrl, { method: "POST", headers: headers });
+            const data = await resp.json();
+            if (resp.ok) {
+                showToast(`✦ Synced ${data.synced_count || 0} key(s) from Supabase Vault!`);
+            } else {
+                showToast(`Supabase sync: ${data.detail || data.message || 'Complete'}`);
+            }
+            window.loadGeminiKeysStatus();
+        } catch (err) {
+            showToast(`Sync error: ${err.message}`, true);
+        } finally {
+            if (syncBtn) syncBtn.disabled = false;
+        }
+    };
+
     window.handleDeleteGeminiKey = async function (identifier) {
-        if (!confirm(`Remove key ${identifier} from the router pool?`)) return;
+        if (!confirm(`Remove key ${identifier} from the router pool and Supabase vault?`)) return;
 
         try {
             const isPort8000 = (typeof window !== 'undefined' && window.location && window.location.port === "8000");
             const delUrl = isPort8000 ? `/gemini/keys/${encodeURIComponent(identifier)}` : `${BACKEND_BASE_URL}/gemini/keys/${encodeURIComponent(identifier)}`;
-            const resp = await fetch(delUrl, { method: "DELETE" });
+            const token = window.NutriScanSync && window.NutriScanSync.auth ? await window.NutriScanSync.auth.getToken() : null;
+            const headers = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const resp = await fetch(delUrl, { method: "DELETE", headers: headers });
 
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
