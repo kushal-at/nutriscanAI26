@@ -299,18 +299,6 @@
                             <span class="upload-hint">Directly above the plate — captures surface area and rim</span>
                             <div class="upload-preview" id="topDropZone" onclick="document.getElementById('topImage').click()">
                                 <img id="topPreview" src="" alt="Overhead view" style="display: none;">
-                                <div id="plateOverlayWrapper" class="plate-overlay-wrapper" style="display: none;">
-                                    <svg id="plateSvgOverlay" class="plate-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-                                    <div id="platePinsContainer" class="plate-pins-container"></div>
-                                </div>
-                                <div id="overlayToolbar" class="overlay-toolbar" style="display: none;" onclick="event.stopPropagation();">
-                                    <button type="button" class="overlay-toolbar-btn active" id="btnTogglePolygons" onclick="toggleFoodPolygons();" title="Toggle Food Segment Outlines">
-                                        <i data-lucide="scan" class="icon-xs"></i> <span>Segments</span>
-                                    </button>
-                                    <button type="button" class="overlay-toolbar-btn active" id="btnTogglePins" onclick="toggleFoodPins();" title="Toggle Ingredient Pins">
-                                        <i data-lucide="map-pin" class="icon-xs"></i> <span>Pins</span>
-                                    </button>
-                                </div>
                                 <div id="topPlaceholder" class="upload-empty">
                                     <div class="upload-icon"><i data-lucide="camera"></i></div>
                                     <span class="upload-empty-text">Drop an image or select a photo</span>

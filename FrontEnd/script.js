@@ -1740,109 +1740,21 @@
     window.renderNonFoodDetected = renderNonFoodDetected;
 
     // -------------------------------------------------------------
-    // INTERACTIVE PLATE SPATIAL CONTOUR & PIN SYSTEM
+    // OVERHEAD DISPLAY BOX OVERLAY CONTROLS (CLEAN DISPLAY)
     // -------------------------------------------------------------
     function clearPlateSpatialOverlay() {
         const wrapper = document.getElementById("plateOverlayWrapper");
         const toolbar = document.getElementById("overlayToolbar");
-        const svg = document.getElementById("plateSvgOverlay");
-        const pinsCont = document.getElementById("platePinsContainer");
         if (wrapper) wrapper.style.display = "none";
         if (toolbar) toolbar.style.display = "none";
-        if (svg) svg.innerHTML = "";
-        if (pinsCont) pinsCont.innerHTML = "";
     }
 
-    function renderPlateSpatialOverlay(clusters) {
-        const wrapper = document.getElementById("plateOverlayWrapper");
-        const toolbar = document.getElementById("overlayToolbar");
-        const svg = document.getElementById("plateSvgOverlay");
-        const pinsCont = document.getElementById("platePinsContainer");
-
-        if (!wrapper || !svg || !pinsCont) return;
-
-        if (!Array.isArray(clusters) || clusters.length === 0) {
-            clearPlateSpatialOverlay();
-            return;
-        }
-
-        svg.innerHTML = "";
-        pinsCont.innerHTML = "";
-
-        clusters.forEach((cl, idx) => {
-            const cid = cl.cluster_id || (idx + 1);
-            const name = cl.culinary_name || cl.label || "Food";
-
-            // 1. Draw SVG Polygon if coordinates exist
-            if (Array.isArray(cl.polygon_norm) && cl.polygon_norm.length >= 3) {
-                const pointsStr = cl.polygon_norm
-                    .map(pt => `${(pt[0] * 100).toFixed(2)},${(pt[1] * 100).toFixed(2)}`)
-                    .join(" ");
-
-                const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                polygon.setAttribute("points", pointsStr);
-                polygon.setAttribute("class", "food-polygon-path");
-                polygon.setAttribute("data-cluster-id", String(cid));
-                polygon.setAttribute("id", `poly_cluster_${cid}`);
-
-                polygon.addEventListener("mouseenter", () => highlightCluster(cid, true));
-                polygon.addEventListener("mouseleave", () => highlightCluster(cid, false));
-                polygon.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    focusIngredientCard(name);
-                });
-
-                svg.appendChild(polygon);
-            }
-
-            // 2. Draw Centroid Pin
-            let leftPct = 50;
-            let topPct = 50;
-
-            if (Array.isArray(cl.bbox_norm) && cl.bbox_norm.length === 4) {
-                const [ymin, xmin, ymax, xmax] = cl.bbox_norm;
-                leftPct = Math.max(5, Math.min(95, ((xmin + xmax) / 2) * 100));
-                topPct = Math.max(5, Math.min(95, ((ymin + ymax) / 2) * 100));
-            }
-
-            const pin = document.createElement("div");
-            pin.className = "food-pin-pill";
-            pin.id = `pin_cluster_${cid}`;
-            pin.setAttribute("data-cluster-id", String(cid));
-            pin.style.left = `${leftPct.toFixed(1)}%`;
-            pin.style.top = `${topPct.toFixed(1)}%`;
-            pin.innerHTML = `
-                <span class="food-pin-dot"></span>
-                <span>${escapeHTML(name)}</span>
-            `;
-
-            pin.addEventListener("mouseenter", () => highlightCluster(cid, true));
-            pin.addEventListener("mouseleave", () => highlightCluster(cid, false));
-            pin.addEventListener("click", (e) => {
-                e.stopPropagation();
-                focusIngredientCard(name);
-            });
-
-            pinsCont.appendChild(pin);
-        });
-
-        wrapper.style.display = "block";
-        if (toolbar) toolbar.style.display = "flex";
+    function renderPlateSpatialOverlay() {
+        // Segmentation overlay intentionally disabled on overhead preview for a clean, unobstructed photo view
+        clearPlateSpatialOverlay();
     }
 
-    function highlightCluster(clusterId, isActive) {
-        const poly = document.getElementById(`poly_cluster_${clusterId}`);
-        const pin = document.getElementById(`pin_cluster_${clusterId}`);
-
-        if (poly) {
-            if (isActive) poly.classList.add("highlighted");
-            else poly.classList.remove("highlighted");
-        }
-        if (pin) {
-            if (isActive) pin.classList.add("highlighted");
-            else pin.classList.remove("highlighted");
-        }
-    }
+    function highlightCluster() {}
 
     function focusIngredientCard(ingredientName) {
         if (!ingredientName) return;
@@ -1867,24 +1779,8 @@
         }
     }
 
-    window.toggleFoodPolygons = function () {
-        const svg = document.getElementById("plateSvgOverlay");
-        const btn = document.getElementById("btnTogglePolygons");
-        if (!svg || !btn) return;
-        const isHidden = svg.style.display === "none";
-        svg.style.display = isHidden ? "block" : "none";
-        btn.classList.toggle("active", isHidden);
-    };
-
-    window.toggleFoodPins = function () {
-        const pinsCont = document.getElementById("platePinsContainer");
-        const btn = document.getElementById("btnTogglePins");
-        if (!pinsCont || !btn) return;
-        const isHidden = pinsCont.style.display === "none";
-        pinsCont.style.display = isHidden ? "block" : "none";
-        btn.classList.toggle("active", isHidden);
-    };
-
+    window.toggleFoodPolygons = function () {};
+    window.toggleFoodPins = function () {};
     window.clearPlateSpatialOverlay = clearPlateSpatialOverlay;
     window.renderPlateSpatialOverlay = renderPlateSpatialOverlay;
 
