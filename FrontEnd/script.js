@@ -953,6 +953,8 @@
         const previewCont = topPreview?.closest(".upload-preview");
         if (previewCont) previewCont.classList.add("has-image");
         if (scanFoodHint) scanFoodHint.value = hintText;
+        const plateDiamSelect = document.getElementById("plateDiameter");
+        if (plateDiamSelect) plateDiamSelect.value = isToast ? "25" : "18";
 
         try {
             const resp = await fetch(imgPath);
@@ -996,7 +998,7 @@
             };
             window.currentAnalysisData = {
                 dish: "Garden nourish bowl",
-                scale_reference: { detected: true, plate_diameter_cm: 26.0 },
+                scale_reference: { detected: true, plate_diameter_cm: 18.0 },
                 ingredients: { ...window.currentIngredients },
                 nutrition: [
                     { ingredient: "Steamed quinoa & brown rice", weight_g: 150, energy_kcal: 210, carb_g: 42, protein_g: 6, fat_g: 3, fibre_g: 4 },
@@ -1827,9 +1829,12 @@
 
         const dishName = escapeHTML(data.dish || window.currentDish || "Plated Meal");
         const scale = data.scale_reference || {};
+        const diam = Number(scale.plate_diameter_cm) || 25;
+        const isBowl = diam <= 18 || (data.dish && /bowl|soup|cereal|ramen|poke|curry|dal/i.test(data.dish));
+        const containerLabel = isBowl ? 'bowl' : 'plate';
         const plateText = scale.detected
-            ? `Calibrated — ${scale.plate_diameter_cm || 25} cm plate`
-            : `${scale.plate_diameter_cm || 25} cm plate (partially visible / estimated)`;
+            ? `Calibrated — ${diam} cm ${containerLabel}`
+            : `${diam} cm ${containerLabel} (reference)`;
 
         const totals = data.recipe_totals || {
             total_weight_g: 0, energy_kcal: 0, carb_g: 0, protein_g: 0, fat_g: 0, fibre_g: 0
@@ -4161,11 +4166,13 @@
             const d = meta.plate_diameter_cm || (data.scale_reference && data.scale_reference.plate_diameter_cm) || 25.0;
             const a = meta.plate_area_cm2 || (data.scale_reference && data.scale_reference.plate_physical_area_cm2) || 490.9;
             const v = meta.total_integrated_volume_ml || "Calibrated";
+            const isBowl = Number(d) <= 18 || (data.dish && /bowl|soup|cereal|ramen|poke/i.test(data.dish));
+            const containerName = isBowl ? 'Bowl' : 'Plate';
             details.innerHTML = `
                 <div style="font-weight: 700; color: var(--ink); margin-bottom: 6px;">📐 Calibrated Metrology & Volumetric Estimations:</div>
-                <div>• <strong>Plate Radius:</strong> ${r} cm (Diameter: ${d} cm, Area: ${a} cm²)</div>
+                <div>• <strong>Container:</strong> ${containerName} (Radius: ${r} cm, Diameter: ${d} cm, Area: ${a} cm²)</div>
                 <div>• <strong>Integrated Food Volume:</strong> ~${v} ml across identified mounds</div>
-                <div>• <strong>Depth Colormap:</strong> 0.0 cm (Plate surface / Navy) → 5.0+ cm (Peak food elevation / Red)</div>
+                <div>• <strong>Depth Colormap:</strong> 0.0 cm (Surface baseline / Navy) → 5.0+ cm (Peak food elevation / Red)</div>
             `;
         }
         openModal("modal-depth-map");

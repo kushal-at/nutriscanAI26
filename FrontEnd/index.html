@@ -385,12 +385,26 @@
                     <!-- Calibration & Controls Row -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;" class="dash-hero-grid">
                         <div class="form-group">
-                            <label for="plateDiameter" class="form-label">Plate diameter</label>
+                            <label for="plateDiameter" class="form-label">Plate / Bowl Size & Calibration</label>
                             <select id="plateDiameter" class="form-select">
-                                <option value="20">20 cm — small / breakfast plate</option>
-                                <option value="25" selected>25 cm — standard dinner plate</option>
-                                <option value="26">26 cm — wide dinner plate</option>
-                                <option value="30">30 cm — large serving platter</option>
+                                <optgroup label="🥣 Bowls">
+                                    <option value="12">12 cm — Small snack / dipping bowl</option>
+                                    <option value="14">14 cm — Cereal / rice / side bowl</option>
+                                    <option value="16">16 cm — Soup / oatmeal bowl</option>
+                                    <option value="18">18 cm — Grain / poke / nourish bowl</option>
+                                    <option value="20">20 cm — Ramen / pho / deep noodle bowl</option>
+                                    <option value="22">22 cm — Large salad / serving bowl</option>
+                                </optgroup>
+                                <optgroup label="🍽️ Plates">
+                                    <option value="15">15 cm — Bread & butter plate / saucer</option>
+                                    <option value="18">18 cm — Dessert / appetizer plate</option>
+                                    <option value="20">20 cm — Small / breakfast plate</option>
+                                    <option value="22">22 cm — Medium / bistro lunch plate</option>
+                                    <option value="25" selected>25 cm — Standard dinner plate (Default)</option>
+                                    <option value="27">27 cm — Wide restaurant dinner plate</option>
+                                    <option value="30">30 cm — Large steak / charger plate</option>
+                                    <option value="32">32 cm — Large serving platter / buffet tray</option>
+                                </optgroup>
                             </select>
                             <span class="tiny">Reference diameter for pixel-to-centimetre ellipse calibration</span>
                         </div>
