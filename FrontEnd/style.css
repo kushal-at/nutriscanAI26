@@ -4381,3 +4381,97 @@ input[type="file"],
 
 
 /* ── Progress Stepper ── */
+
+
+/* ========================================================
+   DIET PLANS & MODERN MEAL DIARY STYLING
+   ======================================================== */
+
+/* 14-Day Streak Strip */
+.history-streak-days::-webkit-scrollbar {
+    height: 4px;
+}
+.history-streak-days::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+.history-streak-pill:hover {
+    border-color: var(--forest) !important;
+    transform: translateY(-1px);
+}
+.history-streak-pill.active {
+    box-shadow: 0 0 0 2px var(--forest);
+}
+
+/* Meal Type Pills */
+.meal-type-pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.meal-type-breakfast {
+    background: rgba(217, 119, 6, 0.12);
+    color: #d97706;
+}
+.meal-type-lunch {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+.meal-type-dinner {
+    background: rgba(2, 132, 199, 0.12);
+    color: #0284c7;
+}
+.meal-type-snack {
+    background: rgba(147, 51, 234, 0.12);
+    color: #9333ea;
+}
+
+/* Meal Card Premium Hover & Layout */
+.meal-card-premium {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.15s ease, transform 0.15s ease;
+    border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05));
+}
+.meal-card-premium:last-child {
+    border-bottom: none;
+}
+.meal-card-premium:hover {
+    background: var(--surface-light, rgba(0,0,0,0.02));
+}
+
+/* Plan Catalog Cards */
+.plan-catalog-card {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.plan-catalog-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Mobile Bottom Nav 6-item spacing */
+@media (max-width: 768px) {
+    .mobile-bottom-nav {
+        gap: 2px;
+        padding: 4px 6px;
+    }
+    .mobile-bottom-nav .mob-nav-btn {
+        font-size: 9px;
+        padding: 4px 2px;
+    }
+    .mobile-bottom-nav .mob-nav-btn i {
+        width: 16px;
+        height: 16px;
+    }
+    .mobile-bottom-nav .mob-nav-scan {
+        width: 40px;
+        height: 40px;
+    }
+}

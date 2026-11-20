@@ -14,6 +14,8 @@
     const STORAGE_KEY_PROFILE = 'nutriscan_profile';
     const STORAGE_KEY_WATER = 'nutriscan_water';
     const STORAGE_KEY_THEME = 'nutriscan_theme';
+    const STORAGE_KEY_PLANS = 'nutriscan_plans';
+    const STORAGE_KEY_ACTIVE_PLAN = 'nutriscan_active_plan';
 
     // Dynamic Origin Resolution: Binds cleanly to current window host (127.0.0.1, localhost, or LAN)
     function resolveServiceUrl(defaultPort) {
@@ -367,9 +369,10 @@
             const titles = {
                 dashboard: 'Dashboard',
                 scanner: 'Food Scanner',
-                history: 'Meal History',
+                history: 'Meal Diary',
                 reports: 'Diet Reports',
                 goals: 'Goals & Targets',
+                plans: 'Diet Plans',
                 profile: 'Profile & Settings'
             };
             crumbEl.textContent = titles[viewName] || viewName;
@@ -381,6 +384,7 @@
         if (viewName === 'history') renderHistory();
         if (viewName === 'reports') renderReports();
         if (viewName === 'goals') renderGoals();
+        if (viewName === 'plans') renderDietPlans();
         if (viewName === 'profile') renderProfile();
 
         renderLucide();
@@ -1491,7 +1495,7 @@
                     window.currentAnalysisData.nutrition = mlData.nutrition;
                     window.currentAnalysisData.recipe_totals = mlData.recipe_totals;
                     renderAnalysisResults(window.currentAnalysisData);
-                    showToast("✦ CatBoost regression recalculated!");
+                    showToast("✦ Nutrition estimates recalculated!");
                     calculated = true;
                 }
             }
@@ -2030,19 +2034,18 @@
         `;
 
         const vlmProvider = data.vlm_provider || (data.image_processing && data.image_processing.vlm_provider);
-        const vlmKeyUsed = data.vlm_key_used || (data.image_processing && data.image_processing.vlm_key_used);
         const providerBadge = vlmProvider ? `
             <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
                 <i data-lucide="sparkles" style="width: 12px; height: 12px;"></i>
-                <span>${escapeHTML(vlmProvider)}${vlmKeyUsed && vlmKeyUsed !== 'N/A' ? ` (${escapeHTML(vlmKeyUsed)})` : ''}</span>
+                <span>AI Vision Verified</span>
             </span>
         ` : '';
 
         const plateRadiusVal = (scale.plate_radius_cm || (scale.plate_diameter_cm ? (scale.plate_diameter_cm / 2.0).toFixed(1) : '12.5'));
         const depthBtn = data.depth_map_b64 ? `
-            <button type="button" class="btn btn-sm btn-outline" onclick="window.nutriScanOpenDepthModal()" style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; color: #0284c7; border-color: rgba(2, 132, 199, 0.35); background: rgba(2, 132, 199, 0.06); cursor: pointer;" title="View calibrated 3D depth map sent to Gemini AI">
+            <button type="button" class="btn btn-sm btn-outline" onclick="window.nutriScanOpenDepthModal()" style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; color: #0284c7; border-color: rgba(2, 132, 199, 0.35); background: rgba(2, 132, 199, 0.06); cursor: pointer;" title="View calibrated 3D volumetric elevation map">
                 <i data-lucide="layers" style="width: 12px; height: 12px;"></i>
-                <span>3D Depth Map (r=${plateRadiusVal}cm)</span>
+                <span>3D Elevation Map (r=${plateRadiusVal}cm)</span>
             </button>
         ` : '';
 
@@ -2280,29 +2283,78 @@
         const meals = Storage.getMeals();
         const container = document.getElementById('history-meals-container');
         const countBadge = document.getElementById('history-count-badge');
-        const groupHeader = document.getElementById('history-group-header');
+        const goals = Storage.getGoals();
+        const targetKcal = goals.calories || 2000;
         if (!container) return;
 
         const todayStr = getTodayDateString(0);
         const d7Str = getTodayDateString(7);
         const d30Str = getTodayDateString(30);
 
-        // Date range filtering
+        // 1. Render 14-Day Consistency & Streak Bar
+        const streakDaysContainer = document.getElementById('history-streak-days');
+        const streakCountEl = document.getElementById('history-streak-count');
+
+        if (streakDaysContainer) {
+            const daysArr = [];
+            for (let i = 13; i >= 0; i--) {
+                const dStr = getTodayDateString(i);
+                const dObj = new Date();
+                dObj.setDate(dObj.getDate() - i);
+                const dayKcal = meals.filter(m => m.date === dStr).reduce((sum, m) => sum + (Number(m.calories) || 0), 0);
+                const count = meals.filter(m => m.date === dStr).length;
+                daysArr.push({
+                    date: dStr,
+                    weekday: dObj.toLocaleDateString('en-US', { weekday: 'short' }),
+                    dayNum: dObj.getDate(),
+                    month: dObj.toLocaleDateString('en-US', { month: 'short' }),
+                    isToday: i === 0,
+                    kcal: dayKcal,
+                    count: count,
+                    hitGoal: dayKcal >= (targetKcal * 0.8) && dayKcal <= (targetKcal * 1.2)
+                });
+            }
+
+            // Calculate active streak
+            let streak = 0;
+            for (let i = 0; i < 30; i++) {
+                const d = getTodayDateString(i);
+                if (meals.some(m => m.date === d)) {
+                    streak++;
+                } else if (i > 0) {
+                    break;
+                }
+            }
+            if (streakCountEl) streakCountEl.textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
+
+            streakDaysContainer.innerHTML = daysArr.map(d => {
+                const isSelected = (currentHistoryFilter === d.date) || (currentHistoryFilter === 'today' && d.isToday);
+                const hasMeals = d.count > 0;
+                return `
+                    <button type="button" class="history-streak-pill ${isSelected ? 'active' : ''} ${hasMeals ? 'has-meals' : ''}" 
+                            data-streak-date="${d.date}" 
+                            title="${d.weekday}, ${d.month} ${d.dayNum}: ${d.kcal} kcal (${d.count} meals)" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 44px; padding: 8px 6px; border-radius: 10px; border: 1px solid ${isSelected ? 'var(--forest)' : (hasMeals ? 'rgba(155, 203, 53, 0.4)' : 'var(--border-color)')}; background: ${isSelected ? 'rgba(36, 74, 44, 0.08)' : (hasMeals ? 'rgba(155, 203, 53, 0.08)' : 'var(--surface-light, #fafafa)')}; cursor: pointer; transition: all 0.15s ease;">
+                        <span style="font-size: 10px; font-weight: 700; color: ${isSelected ? 'var(--forest)' : 'var(--muted)'}; text-transform: uppercase;">${d.weekday}</span>
+                        <span style="font-size: 14px; font-weight: 800; color: var(--ink); margin: 2px 0;">${d.dayNum}</span>
+                        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${hasMeals ? (d.hitGoal ? '#10b981' : '#9bcb35') : 'transparent'};"></span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        // 2. Date range filtering
         let filtered = meals;
         if (currentHistoryFilter === 'today') {
             filtered = meals.filter(m => m.date === todayStr);
-            if (groupHeader) groupHeader.textContent = "Today's Log";
         } else if (currentHistoryFilter === 'week') {
             filtered = meals.filter(m => m.date >= d7Str);
-            if (groupHeader) groupHeader.textContent = "This Week's Log";
         } else if (currentHistoryFilter === 'month') {
             filtered = meals.filter(m => m.date >= d30Str);
-            if (groupHeader) groupHeader.textContent = "This Month's Log";
-        } else {
-            if (groupHeader) groupHeader.textContent = "All Logged Meals";
+        } else if (currentHistoryFilter.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            filtered = meals.filter(m => m.date === currentHistoryFilter);
         }
 
-        // Meal type secondary filter
+        // Secondary meal type filter
         if (currentTypeFilter !== 'all') {
             filtered = filtered.filter(m => m.type === currentTypeFilter);
         }
@@ -2320,46 +2372,126 @@
             countBadge.textContent = `${filtered.length} meal${filtered.length === 1 ? '' : 's'} logged`;
         }
 
+        // 3. Render Empty State or Date-Grouped Cards
         if (filtered.length === 0) {
             container.innerHTML = `
-                <div style="padding: 30px; text-align: center; color: var(--muted);">
-                    <i data-lucide="inbox" class="icon-lg" style="margin-bottom: 8px;"></i>
-                    <p>No meals match your active filters.</p>
-                </div>
-            `;
-        } else {
-            container.innerHTML = filtered.map(m => `
-                <div class="meal" data-meal-id="${m.id}" title="Click to view meal details">
-                    <img class="thumb" src="${escapeHTML(m.image || 'assets/nourish-bowl.png')}" alt="${escapeHTML(m.name)}" onerror="this.src='assets/nourish-bowl.png'">
-                    <div class="meal-info">
-                        <div class="meal-name">${escapeHTML(m.name)}</div>
-                        <div class="meal-time">
-                            <i data-lucide="calendar" class="icon-sm"></i>
-                            <span>${escapeHTML(m.date)} · ${escapeHTML(m.type)} · ${escapeHTML(m.time || '12:00 PM')}</span>
-                        </div>
-                        <div class="meal-macros-inline">
-                            <span>Protein: ${m.protein || 0}g</span>
-                            <span>•</span>
-                            <span>Carbs: ${m.carbs || 0}g</span>
-                            <span>•</span>
-                            <span>Fat: ${m.fat || 0}g</span>
-                        </div>
-                    </div>
-                    <div class="meal-kcal">
-                        ${m.calories || 0}<small>kcal</small>
-                    </div>
-                    <div class="meal-actions" onclick="event.stopPropagation();">
-                        <button class="del-meal-btn" data-delete-id="${m.id}" title="Delete meal">
-                            <i data-lucide="trash-2" class="icon-sm"></i>
+                <div class="card empty-diary-card" style="text-align: center; padding: 48px 24px; border: 2px dashed var(--border-color); background: var(--surface-light, rgba(0,0,0,0.01));">
+                    <div style="font-size: 42px; margin-bottom: 12px;">🥗</div>
+                    <h3 style="font-size: 18px; font-weight: 800; color: var(--forest); margin: 0 0 6px;">Your Diary is Clear</h3>
+                    <p class="tiny" style="color: var(--muted); max-width: 420px; margin: 0 auto 20px;">No meals found matching your current filters. Log food with the AI vision camera or record it manually in seconds.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn btn-forest" onclick="switchView('scanner')">
+                            <i data-lucide="camera" class="icon-sm"></i>
+                            <span>Scan a Plate</span>
+                        </button>
+                        <button class="btn btn-outline" onclick="openModal('modal-add-meal')">
+                            <i data-lucide="plus" class="icon-sm"></i>
+                            <span>Add Meal Manually</span>
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+        } else {
+            // Group filtered meals by date (descending order)
+            const grouped = {};
+            filtered.forEach(m => {
+                const dateKey = m.date || todayStr;
+                if (!grouped[dateKey]) grouped[dateKey] = [];
+                grouped[dateKey].push(m);
+            });
+
+            const sortedDates = Object.keys(grouped).sort().reverse();
+
+            container.innerHTML = sortedDates.map(dateKey => {
+                const dayMeals = grouped[dateKey];
+                const dayKcal = dayMeals.reduce((acc, m) => acc + (Number(m.calories) || 0), 0);
+                const dayP = dayMeals.reduce((acc, m) => acc + (Number(m.protein) || 0), 0);
+                const dayC = dayMeals.reduce((acc, m) => acc + (Number(m.carbs) || 0), 0);
+                const dayF = dayMeals.reduce((acc, m) => acc + (Number(m.fat) || 0), 0);
+
+                let dateTitle = dateKey;
+                if (dateKey === todayStr) {
+                    dateTitle = "Today";
+                } else if (dateKey === getTodayDateString(1)) {
+                    dateTitle = "Yesterday";
+                } else {
+                    const parsed = new Date(dateKey + 'T12:00:00');
+                    if (!isNaN(parsed.getTime())) {
+                        dateTitle = parsed.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                    }
+                }
+
+                const pctTarget = Math.min(100, Math.round((dayKcal / targetKcal) * 100));
+
+                return `
+                    <div class="card history-date-group-card" style="margin-bottom: 20px; overflow: hidden; padding: 0;">
+                        <!-- Date Header & Macro Summary Row -->
+                        <div class="history-group-header-row" style="background: var(--surface-light, rgba(0,0,0,0.02)); border-bottom: 1px solid var(--border-color); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--forest);">${dateTitle}</h3>
+                                    <span class="badge" style="font-size: 11px; padding: 2px 7px;">${dayMeals.length} meal${dayMeals.length === 1 ? '' : 's'}</span>
+                                </div>
+                                <div class="tiny" style="color: var(--muted); margin-top: 3px;">
+                                    <span style="font-weight: 700; color: var(--ink);">${dayKcal.toLocaleString()} kcal</span> / ${targetKcal.toLocaleString()} target (${pctTarget}%)
+                                </div>
+                            </div>
+                            <!-- Mini Macro Summary Pills -->
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #059669; font-weight: 700; font-size: 11px;">P: ${dayP}g</span>
+                                <span class="badge" style="background: rgba(217, 119, 6, 0.1); color: #d97706; font-weight: 700; font-size: 11px;">C: ${dayC}g</span>
+                                <span class="badge" style="background: rgba(2, 132, 199, 0.1); color: #0284c7; font-weight: 700; font-size: 11px;">F: ${dayF}g</span>
+                            </div>
+                        </div>
+
+                        <!-- Meals in Date Group -->
+                        <div class="history-group-meals-list" style="padding: 8px 14px;">
+                            ${dayMeals.map(m => {
+                                const typeClass = (m.type || 'Meal').toLowerCase();
+                                return `
+                                    <div class="meal meal-card-premium" data-meal-id="${m.id}" title="Click to view & edit details" style="cursor: pointer;">
+                                        <img class="thumb" src="${escapeHTML(m.image || 'assets/nourish-bowl.png')}" alt="${escapeHTML(m.name)}" onerror="this.src='assets/nourish-bowl.png'">
+                                        <div class="meal-info">
+                                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                                                <span class="meal-type-pill meal-type-${typeClass}">${escapeHTML(m.type || 'Meal')}</span>
+                                                <span class="tiny" style="color: var(--muted);">${escapeHTML(m.time || '12:00 PM')}</span>
+                                            </div>
+                                            <div class="meal-name" style="font-weight: 750; font-size: 14px; color: var(--ink);">${escapeHTML(m.name)}</div>
+                                            <div class="meal-macros-inline" style="margin-top: 3px; font-size: 12px; color: var(--muted);">
+                                                <span>P: <b style="color: #059669;">${m.protein || 0}g</b></span>
+                                                <span>•</span>
+                                                <span>C: <b style="color: #d97706;">${m.carbs || 0}g</b></span>
+                                                <span>•</span>
+                                                <span>F: <b style="color: #0284c7;">${m.fat || 0}g</b></span>
+                                            </div>
+                                        </div>
+                                        <div class="meal-kcal" style="font-size: 17px; font-weight: 800; color: var(--forest); text-align: right; margin-right: 8px;">
+                                            ${m.calories || 0}<small style="font-size: 11px; font-weight: 600; color: var(--muted);"> kcal</small>
+                                        </div>
+                                        <div class="meal-actions" onclick="event.stopPropagation();" style="display: flex; gap: 4px;">
+                                            <button class="iconbtn-sm clone-meal-btn" data-clone-id="${m.id}" title="Log again today" style="color: var(--forest);">
+                                                <i data-lucide="repeat" class="icon-xs"></i>
+                                            </button>
+                                            <button class="iconbtn-sm edit-meal-btn" data-edit-id="${m.id}" title="Edit meal details">
+                                                <i data-lucide="edit-3" class="icon-xs"></i>
+                                            </button>
+                                            <button class="iconbtn-sm del-meal-btn" data-delete-id="${m.id}" title="Delete meal" style="color: #ef4444;">
+                                                <i data-lucide="trash-2" class="icon-xs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
-        // Summary cards
+        // 4. Summary cards
         const weekMeals = meals.filter(m => m.date >= d7Str);
-        document.getElementById('hist-stat-week-count').textContent = `${weekMeals.length} meals`;
+        const countStatEl = document.getElementById('hist-stat-week-count');
+        if (countStatEl) countStatEl.textContent = `${weekMeals.length} meals`;
 
         const counts = {};
         meals.forEach(m => {
@@ -2373,7 +2505,8 @@
                 favName = name;
             }
         }
-        document.getElementById('hist-stat-fav-name').textContent = favName;
+        const favEl = document.getElementById('hist-stat-fav-name');
+        if (favEl) favEl.textContent = favName;
 
         const dayKcalMap = {};
         weekMeals.forEach(m => {
@@ -2382,7 +2515,8 @@
         const activeDays = Object.keys(dayKcalMap).length || 1;
         const totalWeekKcal = Object.values(dayKcalMap).reduce((a, b) => a + b, 0);
         const avgKcal = Math.round(totalWeekKcal / activeDays);
-        document.getElementById('hist-stat-avg-kcal').textContent = `${avgKcal.toLocaleString()} kcal`;
+        const avgEl = document.getElementById('hist-stat-avg-kcal');
+        if (avgEl) avgEl.textContent = `${avgKcal.toLocaleString()} kcal`;
     }
 
     function initHistoryEvents() {
@@ -2395,6 +2529,18 @@
                 renderHistory();
                 renderLucide();
             });
+        });
+
+        // 14-Day Calendar Streak Pill Delegation
+        document.addEventListener('click', e => {
+            const streakPill = e.target.closest('[data-streak-date]');
+            if (streakPill) {
+                const targetDate = streakPill.getAttribute('data-streak-date');
+                currentHistoryFilter = targetDate;
+                document.querySelectorAll('[data-history-filter]').forEach(b => b.classList.remove('active'));
+                renderHistory();
+                renderLucide();
+            }
         });
 
         // Meal type secondary filters
@@ -2421,9 +2567,41 @@
         // Global meal row click delegation -> Opens Interactive Meal Details
         document.addEventListener('click', e => {
             const mealRow = e.target.closest('.meal[data-meal-id]');
-            if (mealRow && !e.target.closest('.del-meal-btn')) {
+            if (mealRow && !e.target.closest('.meal-actions')) {
                 const id = mealRow.getAttribute('data-meal-id');
                 openMealDetails(id);
+            }
+        });
+
+        // Edit button click delegation
+        document.addEventListener('click', e => {
+            const editBtn = e.target.closest('[data-edit-id]');
+            if (editBtn) {
+                const id = editBtn.getAttribute('data-edit-id');
+                openMealDetails(id);
+            }
+        });
+
+        // Clone / Log Again button delegation
+        document.addEventListener('click', e => {
+            const cloneBtn = e.target.closest('[data-clone-id]');
+            if (cloneBtn) {
+                const id = cloneBtn.getAttribute('data-clone-id');
+                const original = Storage.getMeals().find(m => m.id === id);
+                if (original) {
+                    const cloned = {
+                        ...original,
+                        id: `meal-${Date.now()}`,
+                        date: getTodayDateString(0),
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    };
+                    Storage.addMeal(cloned);
+                    showToast(`✦ Cloned '${cloned.name}' to today's diary!`);
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                    renderLucide();
+                }
             }
         });
 
@@ -2432,12 +2610,14 @@
             const delBtn = e.target.closest('[data-delete-id]');
             if (delBtn) {
                 const id = delBtn.getAttribute('data-delete-id');
-                Storage.deleteMeal(id);
-                showToast('Meal removed from diary');
-                renderDashboard();
-                renderHistory();
-                renderReports();
-                renderLucide();
+                if (confirm('Remove this meal from your diary?')) {
+                    Storage.deleteMeal(id);
+                    showToast('Meal removed from diary');
+                    renderDashboard();
+                    renderHistory();
+                    renderReports();
+                    renderLucide();
+                }
             }
         });
     }
@@ -3696,12 +3876,11 @@
                 const data = await resp.json();
                 const total = data.total_keys || 0;
                 const active = data.active_keys || 0;
-                const model = data.model || 'gemini-2.5-flash';
                 if (total === 0) {
                     descEl.textContent = "No keys configured — click Manage Keys to add";
                     descEl.style.color = "var(--muted)";
                 } else {
-                    descEl.textContent = `Active: ${active}/${total} key(s) (${model}) · Dynamic 429 failover`;
+                    descEl.textContent = `Active: ${active}/${total} key(s) connected · High Precision`;
                     descEl.style.color = active > 0 ? "var(--forest, #059669)" : "var(--amber, #d97706)";
                 }
             } else {
@@ -3764,7 +3943,7 @@
                 if (keys.length === 0) {
                     listEl.innerHTML = `
                         <div class="tiny" style="color: var(--muted); text-align: center; padding: 12px 0;">
-                            No Gemini keys currently registered in pool.<br>Paste your keys below to encrypt and store in Supabase.
+                            No cloud API keys currently registered in pool.<br>Paste your keys below to encrypt and activate.
                         </div>
                     `;
                 } else {
@@ -3801,7 +3980,7 @@
             if (listEl) {
                 listEl.innerHTML = `
                     <div class="tiny" style="color: #ef4444; text-align: center; padding: 12px 0;">
-                        Could not load Gemini keys (${escapeHTML(err.message)}). Ensure Vision Service (8001) is running.
+                        Could not load API keys (${escapeHTML(err.message)}). Ensure Vision Service (8001) is running.
                     </div>
                 `;
             }
@@ -3813,7 +3992,7 @@
         if (!inputEl) return;
         const text = inputEl.value.trim();
         if (!text) {
-            showToast("Please enter at least one Gemini API key", true);
+            showToast("Please enter at least one API key", true);
             return;
         }
 
@@ -3845,7 +4024,7 @@
             }
 
             inputEl.value = "";
-            showToast(`✦ Encrypted & saved ${rawKeys.length} key(s) to Supabase Vault!`);
+            showToast(`✦ Encrypted & saved ${rawKeys.length} key(s) to Secure Vault!`);
             window.loadGeminiKeysStatus();
         } catch (err) {
             showToast(`Failed to add keys: ${err.message}`, true);
@@ -3914,11 +4093,11 @@
                 body: JSON.stringify({ model: model })
             });
             if (resp.ok) {
-                showToast(`Gemini model switched to ${model}`);
+                showToast("AI vision engine mode updated");
                 checkGeminiStatus();
             }
         } catch (e) {
-            console.warn("Could not switch Gemini model:", e);
+            console.warn("Could not switch AI mode:", e);
         }
     };
 
@@ -3929,7 +4108,7 @@
         if (feedbackEl) {
             feedbackEl.style.display = 'block';
             feedbackEl.style.color = 'var(--muted)';
-            feedbackEl.innerHTML = '<span class="spin-icon">⏳</span> Pinging Google Gemini API via Round-Robin Router...';
+            feedbackEl.innerHTML = '<span class="spin-icon">⏳</span> Validating API keys via Cloud AI Router...';
         }
         if (testBtn) testBtn.disabled = true;
 
@@ -3943,15 +4122,15 @@
             if (resp.ok && data.status === "ok") {
                 if (feedbackEl) {
                     feedbackEl.style.color = '#10b981';
-                    feedbackEl.innerHTML = `✓ <b>Success:</b> Responded in <b>${elapsed}ms</b> using key <code>${escapeHTML(data.key_used || '')}</code> (${escapeHTML(data.model || '')})`;
+                    feedbackEl.innerHTML = `✓ <b>Success:</b> Responded in <b>${elapsed}ms</b> using key <code>${escapeHTML(data.key_used || '')}</code>`;
                 }
-                showToast(`✦ Gemini connected in ${elapsed}ms!`);
+                showToast(`✦ Cloud AI connected in ${elapsed}ms!`);
             } else {
                 if (feedbackEl) {
                     feedbackEl.style.color = '#ef4444';
                     feedbackEl.innerHTML = `✗ <b>Error:</b> ${escapeHTML(data.message || 'Test failed')}`;
                 }
-                showToast(`Gemini test failed: ${data.message || 'Error'}`, true);
+                showToast(`Key validation failed: ${data.message || 'Error'}`, true);
             }
             window.loadGeminiKeysStatus();
         } catch (err) {
@@ -3959,7 +4138,7 @@
                 feedbackEl.style.color = '#ef4444';
                 feedbackEl.innerHTML = `✗ <b>Connection Error:</b> ${escapeHTML(err.message)}`;
             }
-            showToast(`Gemini test failed: ${err.message}`, true);
+            showToast(`Connection failed: ${err.message}`, true);
         } finally {
             if (testBtn) testBtn.disabled = false;
         }
@@ -3983,7 +4162,7 @@
             const a = meta.plate_area_cm2 || (data.scale_reference && data.scale_reference.plate_physical_area_cm2) || 490.9;
             const v = meta.total_integrated_volume_ml || "Calibrated";
             details.innerHTML = `
-                <div style="font-weight: 700; color: var(--ink); margin-bottom: 6px;">📐 Calibrated Metrology Sent to Gemini Multimodal AI:</div>
+                <div style="font-weight: 700; color: var(--ink); margin-bottom: 6px;">📐 Calibrated Metrology & Volumetric Estimations:</div>
                 <div>• <strong>Plate Radius:</strong> ${r} cm (Diameter: ${d} cm, Area: ${a} cm²)</div>
                 <div>• <strong>Integrated Food Volume:</strong> ~${v} ml across identified mounds</div>
                 <div>• <strong>Depth Colormap:</strong> 0.0 cm (Plate surface / Navy) → 5.0+ cm (Peak food elevation / Red)</div>
@@ -4248,7 +4427,7 @@
             chatHistory = [{
                 id: 'welcome',
                 role: 'assistant',
-                content: "Hello! I'm **NutriBot**, your AI Nutrition & Diary Assistant powered by local **Qwen3-VL:2B**.\n\nI can:\n• Suggest balanced meals to fit your remaining macros\n• Directly log water or meals (`'Log 300ml water'`)\n• Adjust your daily calorie or macro goals (`'Set protein to 120g'`)\n• Analyze your nutrition trends and give evidence-based advice.\n\nHow can I help you today?",
+                content: "Hello! I'm **NutriBot**, your smart Nutrition & Health Assistant.\n\nI can:\n• Suggest balanced meals tailored to your remaining macros\n• Directly log water or meals (`'Log 300ml water'` or `'I ate 2 eggs and toast'`)\n• Adjust your daily calorie or macro targets (`'Set protein to 130g'`)\n• Analyze your diet consistency and provide actionable advice.\n\nWhat would you like to work on today?",
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 action: null
             }];
@@ -4317,14 +4496,14 @@
                     if (data.status === 'online') {
                         if (dot) dot.classList.remove('offline');
                         if (floatIndicator) floatIndicator.style.background = '#10B981';
-                        if (modelName) modelName.textContent = data.model || 'qwen3-vl:2b';
+                        if (modelName) modelName.textContent = 'Active';
                         return;
                     }
                 }
             } catch (e) {}
             if (dot) dot.classList.add('offline');
             if (floatIndicator) floatIndicator.style.background = '#EF4444';
-            if (modelName) modelName.textContent = 'Ollama offline';
+            if (modelName) modelName.textContent = 'Standby';
         }
 
         function formatMarkdown(text) {
@@ -4680,7 +4859,7 @@
                     const errData = await resp.json().catch(() => ({}));
                     let errMsg = errData.detail || `Server error (${resp.status})`;
                     if (resp.status === 504) {
-                        errMsg = "The local Qwen3-VL:2B model is taking longer to respond or loading into memory. Please try sending your query again in a few moments!";
+                        errMsg = "The assistant is taking longer to respond. Please try sending your query again in a few moments!";
                     }
                     chatHistory.push({
                         id: `err-${Date.now()}`,
@@ -4725,7 +4904,7 @@
                 chatHistory.push({
                     id: `err-${Date.now()}`,
                     role: 'assistant',
-                    content: `⚠️ **Connection Error:** Could not reach the NutriBot agent server. Make sure \`start_services.ps1\` and Ollama are running locally (\`http://127.0.0.1:11434\`).`,
+                    content: `⚠️ **Notice:** NutriBot AI service is initializing. Please verify your local services are running and try again.`,
                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 });
                 saveChatHistory();
@@ -4808,13 +4987,14 @@
             // Views
             { id: 'view-dash', title: 'Dashboard', sub: 'Today’s calories, macros, streak & water', category: 'Views', icon: 'layout-dashboard', action: () => switchView('dashboard') },
             { id: 'view-scan', title: 'Food Scanner', sub: 'Dual-view AI segmentation & portion estimation', category: 'Views', icon: 'camera', action: () => switchView('scanner') },
-            { id: 'view-hist', title: 'Meal History', sub: 'Browse past meals, search & edit entries', category: 'Views', icon: 'clock', action: () => switchView('history') },
+            { id: 'view-hist', title: 'Meal Diary', sub: 'Daily timeline, calorie summaries & streak tracker', category: 'Views', icon: 'clock', action: () => switchView('history') },
+            { id: 'view-plans', title: 'Diet Plans', sub: 'Structured nutritional frameworks & weekly meal planner', category: 'Views', icon: 'clipboard-list', action: () => switchView('plans') },
             { id: 'view-rep', title: 'Diet Reports', sub: '7/14/30 day macro breakdowns & calorie trends', category: 'Views', icon: 'bar-chart-2', action: () => switchView('reports') },
             { id: 'view-goals', title: 'Goals & Targets', sub: 'Adjust calorie budget, macro ratio & diet patterns', category: 'Views', icon: 'target', action: () => switchView('goals') },
-            { id: 'view-prof', title: 'Profile & Settings', sub: 'Biometrics, Gemini AI key pool & preferences', category: 'Views', icon: 'user', action: () => switchView('profile') },
+            { id: 'view-prof', title: 'Profile & Settings', sub: 'Biometrics, AI engine keys & preferences', category: 'Views', icon: 'user', action: () => switchView('profile') },
 
             // Quick Actions
-            { id: 'act-bot', title: 'Chat with NutriBot AI', sub: 'Open autonomous Qwen3-VL:2B nutrition assistant', category: 'Actions', icon: 'bot', action: () => {
+            { id: 'act-bot', title: 'Chat with NutriBot AI', sub: 'Open smart AI nutrition assistant', category: 'Actions', icon: 'bot', action: () => {
                 const drawer = document.getElementById('nutribot-drawer');
                 const backdrop = document.getElementById('nutribot-backdrop');
                 if (drawer) drawer.classList.add('open');
@@ -4972,6 +5152,381 @@
     }
 
     // -------------------------------------------------------------
+    // DIET PLANS & NUTRITION FRAMEWORKS ENGINE
+    // -------------------------------------------------------------
+    const DEFAULT_DIET_PLANS = [
+        {
+            id: "plan-cut",
+            name: "High-Protein Lean Cut",
+            badge: "Fat Loss & Muscle Retention",
+            desc: "Preserve lean skeletal muscle while accelerating fat loss via high thermic effect of food and protein satiety.",
+            calories: 1800,
+            protein: 180,
+            carbs: 158,
+            fat: 50,
+            macroSplit: "40% P · 35% C · 25% F",
+            icon: "flame",
+            focus: "Skinless poultry, egg whites, wild salmon, 0% Greek yogurt, quinoa, cruciferous vegetables",
+            schedule: [
+                // Mon (0)
+                {
+                    breakfast: { name: "Egg White Veggie Scramble with Avocado & Rye Toast", kcal: 380, p: 34, c: 32, f: 12 },
+                    lunch: { name: "Herb Grilled Chicken Breast with Tri-Color Quinoa & Steamed Broccoli", kcal: 520, p: 48, c: 45, f: 14 },
+                    snack: { name: "Non-Fat Greek Yogurt with Chia Seeds & Wild Blueberries", kcal: 220, p: 24, c: 22, f: 4 },
+                    dinner: { name: "Pan-Seared Pacific Cod with Roasted Asparagus & Sweet Potato Wedges", kcal: 500, p: 46, c: 42, f: 12 }
+                },
+                // Tue (1)
+                {
+                    breakfast: { name: "Overnight Oats with Whey Protein, Cinnamon & Crushed Walnuts", kcal: 410, p: 35, c: 44, f: 11 },
+                    lunch: { name: "Seared Turkey Tenderloin Wrap with Mixed Greens & Light Tahini", kcal: 510, p: 46, c: 42, f: 14 },
+                    snack: { name: "Edamame Beans in Sea Salt & Cottage Cheese", kcal: 210, p: 25, c: 14, f: 5 },
+                    dinner: { name: "Grilled Flank Steak Strips with Stir-Fried Zucchini & Jasmine Rice", kcal: 540, p: 48, c: 44, f: 15 }
+                },
+                // Wed (2)
+                {
+                    breakfast: { name: "Smoked Salmon & Poached Eggs on Sourdough with Spinach", kcal: 420, p: 36, c: 30, f: 16 },
+                    lunch: { name: "Chipotle Spiced Chicken & Black Bean Power Bowl", kcal: 530, p: 50, c: 48, f: 12 },
+                    snack: { name: "Protein Berry Smoothie with Unsweetened Almond Milk", kcal: 200, p: 26, c: 18, f: 3 },
+                    dinner: { name: "Baked Herb Salmon with Sautéed Garlic Kale & Baby Potatoes", kcal: 520, p: 44, c: 38, f: 16 }
+                },
+                // Thu (3)
+                {
+                    breakfast: { name: "Protein Fluff Pancakes with Fresh Strawberries & Sugar-Free Maple", kcal: 390, p: 38, c: 40, f: 6 },
+                    lunch: { name: "Lemon Pepper Tuna Steak Salad with Boiled Eggs & French Beans", kcal: 490, p: 48, c: 26, f: 18 },
+                    snack: { name: "Jerky Strips & Apple Slices with Light Peanut Butter", kcal: 230, p: 20, c: 22, f: 7 },
+                    dinner: { name: "Stir-Fried Tofu & Chicken Mince in Ginger Soy with Brown Rice", kcal: 540, p: 46, c: 48, f: 14 }
+                },
+                // Fri (4)
+                {
+                    breakfast: { name: "Southwest Omelette with Black Beans, Peppers & Salsa", kcal: 410, p: 35, c: 28, f: 16 },
+                    lunch: { name: "Grilled Chicken Mediterranean Wrap with Tzatziki & Cucumbers", kcal: 510, p: 46, c: 44, f: 13 },
+                    snack: { name: "Rice Cakes with Smoked Turkey Slices & Cucumber", kcal: 190, p: 22, c: 18, f: 3 },
+                    dinner: { name: "Grilled Sea Bass with Lemon Garlic Herbs & Roasted Butternut Squash", kcal: 530, p: 45, c: 40, f: 14 }
+                },
+                // Sat (5)
+                {
+                    breakfast: { name: "Protein French Toast with Cinnamon, Berries & Skyr Yogurt", kcal: 430, p: 38, c: 48, f: 8 },
+                    lunch: { name: "Grilled Beef Tenderloin Bowl with Farro, Roasted Peppers & Greens", kcal: 540, p: 48, c: 46, f: 16 },
+                    snack: { name: "Hard Boiled Eggs (x2) & Cherry Tomatoes", kcal: 180, p: 14, c: 6, f: 11 },
+                    dinner: { name: "Baked Trout Fillet with Sautéed Swiss Chard & Wild Rice", kcal: 500, p: 44, c: 38, f: 14 }
+                },
+                // Sun (6)
+                {
+                    breakfast: { name: "Cottage Cheese & Berry Power Bowl with Flaxseeds & Honey", kcal: 380, p: 32, c: 36, f: 10 },
+                    lunch: { name: "Roasted Turkey Breast with Mashed Cauliflower & Steamed Carrots", kcal: 490, p: 48, c: 32, f: 14 },
+                    snack: { name: "Whey Protein Shake with Ice & Cold Brew Coffee", kcal: 160, p: 28, c: 4, f: 2 },
+                    dinner: { name: "Charred Garlic Shrimp with Zucchini Noodles & Basil Pesto", kcal: 520, p: 46, c: 28, f: 20 }
+                }
+            ]
+        },
+        {
+            id: "plan-bulk",
+            name: "Clean Hypertrophy Bulk",
+            badge: "Muscle Growth & Strength",
+            desc: "Calibrated caloric surplus paired with nutrient-dense complex carbohydrates to fuel progressive overload and glycogen replenishment.",
+            calories: 2600,
+            protein: 195,
+            carbs: 312,
+            fat: 64,
+            macroSplit: "30% P · 48% C · 22% F",
+            icon: "activity",
+            focus: "Lean ground beef, chicken thighs, whole eggs, oats, jasmine rice, sweet potatoes, bananas, nut butters"
+        },
+        {
+            id: "plan-mediterranean",
+            name: "Mediterranean Longevity",
+            badge: "Cardiovascular & Vitality",
+            desc: "Whole food protocol rich in polyphenols, monounsaturated fats, wild seafood, and diverse fermentable fibers.",
+            calories: 2050,
+            protein: 128,
+            carbs: 230,
+            fat: 68,
+            macroSplit: "25% P · 45% C · 30% F",
+            icon: "heart",
+            focus: "Extra virgin olive oil, wild sardines, lentils, walnuts, heirloom greens, chickpeas, pomegranate"
+        },
+        {
+            id: "plan-keto",
+            name: "Metabolic Ketogenic",
+            badge: "Fat Adaptation & Satiety",
+            desc: "Low-glycemic ketogenic framework inducing nutritional ketosis for steady energy, focus, and stable blood sugar.",
+            calories: 1900,
+            protein: 119,
+            carbs: 48,
+            fat: 137,
+            macroSplit: "25% P · 10% C · 65% F",
+            icon: "zap",
+            focus: "Avocados, wild salmon, pasture butter, MCT oil, macadamia nuts, organic eggs, baby spinach"
+        },
+        {
+            id: "plan-plant",
+            name: "Plant-Powered Whole Foods",
+            badge: "100% Vegan & Fiber-Rich",
+            desc: "Whole food plant-exclusive protocol providing complete amino acid coverage, high antioxidant status, and gut diversity.",
+            calories: 2100,
+            protein: 131,
+            carbs: 273,
+            fat: 54,
+            macroSplit: "25% P · 52% C · 23% F",
+            icon: "leaf",
+            focus: "Organic tempeh, edamame, black lentils, hemp hearts, chia seed puddings, sweet potato mash"
+        },
+        {
+            id: "plan-fasting",
+            name: "Intermittent Fasting (16:8)",
+            badge: "Autophagy & Insulin Reset",
+            desc: "16-hour fasting window (8 PM - 12 PM) with an 8-hour feeding window (12 PM - 8 PM) to optimize cellular cleansing.",
+            calories: 1950,
+            protein: 146,
+            carbs: 195,
+            fat: 65,
+            macroSplit: "30% P · 40% C · 30% F",
+            icon: "clock",
+            focus: "High-protein feeding anchors at 12 PM and 7:30 PM with clean hydration and electrolytes during fast"
+        }
+    ];
+
+    let currentSelectedPlanDay = 0; // 0 = Mon, 6 = Sun
+
+    function getCustomPlans() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_PLANS);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function getAllDietPlans() {
+        return [...DEFAULT_DIET_PLANS, ...getCustomPlans()];
+    }
+
+    function getActivePlan() {
+        const plans = getAllDietPlans();
+        const activeId = localStorage.getItem(STORAGE_KEY_ACTIVE_PLAN) || 'plan-cut';
+        return plans.find(p => p.id === activeId) || plans[0];
+    }
+
+    function initDietPlans() {
+        // Day selector clicks
+        document.querySelectorAll('#plan-day-selector [data-plan-day]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#plan-day-selector [data-plan-day]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSelectedPlanDay = parseInt(btn.getAttribute('data-plan-day'), 10) || 0;
+                renderPlanSchedule();
+                renderLucide();
+            });
+        });
+    }
+
+    function renderDietPlans() {
+        const activePlan = getActivePlan();
+        const allPlans = getAllDietPlans();
+
+        // 1. Update Active Plan Hero Card
+        const heroTitle = document.getElementById('active-plan-title');
+        const heroDesc = document.getElementById('active-plan-desc');
+        const heroKcal = document.getElementById('active-plan-kcal');
+        const heroProtein = document.getElementById('active-plan-protein');
+        const heroCarbs = document.getElementById('active-plan-carbs');
+        const heroFat = document.getElementById('active-plan-fat');
+
+        if (heroTitle) heroTitle.textContent = activePlan.name;
+        if (heroDesc) heroDesc.textContent = activePlan.desc;
+        if (heroKcal) heroKcal.innerHTML = `${activePlan.calories.toLocaleString()} <small style="font-size: 12px; font-weight: 600; color: var(--muted);">kcal</small>`;
+        if (heroProtein) heroProtein.innerHTML = `${activePlan.protein}g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small>`;
+        if (heroCarbs) heroCarbs.innerHTML = `${activePlan.carbs}g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small>`;
+        if (heroFat) heroFat.innerHTML = `${activePlan.fat}g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small>`;
+
+        // 2. Render Catalog Grid
+        const grid = document.getElementById('plans-catalog-grid');
+        if (grid) {
+            grid.innerHTML = allPlans.map(plan => {
+                const isActive = plan.id === activePlan.id;
+                return `
+                    <div class="card plan-catalog-card" style="display: flex; flex-direction: column; justify-content: space-between; border: ${isActive ? '2px solid var(--forest)' : '1px solid var(--border-color)'}; background: ${isActive ? 'rgba(36, 74, 44, 0.03)' : 'var(--white)'}; position: relative; padding: 20px;">
+                        ${isActive ? '<span class="badge" style="position: absolute; top: 12px; right: 12px; background: var(--forest); color: white; font-size: 10px; font-weight: 700;">ACTIVE</span>' : ''}
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(155, 203, 53, 0.2); color: var(--forest); display: grid; place-items: center;">
+                                    <i data-lucide="${plan.icon || 'clipboard-list'}" style="width: 16px; height: 16px;"></i>
+                                </div>
+                                <span class="badge" style="font-size: 10px;">${escapeHTML(plan.badge || 'Framework')}</span>
+                            </div>
+                            <h3 style="font-size: 16px; font-weight: 800; margin: 4px 0 6px; color: var(--forest);">${escapeHTML(plan.name)}</h3>
+                            <p class="tiny" style="color: var(--muted); line-height: 1.4; margin-bottom: 12px;">${escapeHTML(plan.desc)}</p>
+                            <div style="background: var(--surface-light, rgba(0,0,0,0.02)); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 14px; color: var(--ink); margin-bottom: 4px;">
+                                    <span>Target</span>
+                                    <span>${plan.calories.toLocaleString()} kcal</span>
+                                </div>
+                                <div class="tiny" style="color: var(--forest); font-weight: 700;">${plan.macroSplit || `${plan.protein}g P · ${plan.carbs}g C · ${plan.fat}g F`}</div>
+                            </div>
+                            ${plan.focus ? `<div class="tiny" style="color: var(--muted); margin-bottom: 12px;"><strong>Key Staples:</strong> ${escapeHTML(plan.focus)}</div>` : ''}
+                        </div>
+                        <div>
+                            <button type="button" class="btn ${isActive ? 'btn-outline' : 'btn-forest'}" style="width: 100%; justify-content: center; font-size: 13px;" onclick="window.activatePlan('${plan.id}')" ${isActive ? 'disabled' : ''}>
+                                ${isActive ? '<i data-lucide="check" class="icon-xs"></i> Active Plan' : 'Activate Plan'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 3. Render Daily Meal Schedule
+        renderPlanSchedule();
+        renderLucide();
+    }
+
+    function renderPlanSchedule() {
+        const activePlan = getActivePlan();
+        const scheduleContainer = document.getElementById('plan-daily-schedule-slots');
+        if (!scheduleContainer) return;
+
+        // Fallback schedule generator if custom plan has none
+        const daySchedule = (activePlan.schedule && activePlan.schedule[currentSelectedPlanDay]) || {
+            breakfast: { name: "High-Protein Scramble with Whole Grain Toast & Avocado", kcal: Math.round(activePlan.calories * 0.25), p: Math.round(activePlan.protein * 0.25), c: Math.round(activePlan.carbs * 0.25), f: Math.round(activePlan.fat * 0.25) },
+            lunch: { name: "Nourishing Protein Grain Bowl with Crisp Greens & Olive Oil", kcal: Math.round(activePlan.calories * 0.35), p: Math.round(activePlan.protein * 0.35), c: Math.round(activePlan.carbs * 0.35), f: Math.round(activePlan.fat * 0.35) },
+            snack: { name: "Greek Yogurt or Plant Smoothie with Mixed Berries & Seeds", kcal: Math.round(activePlan.calories * 0.15), p: Math.round(activePlan.protein * 0.15), c: Math.round(activePlan.carbs * 0.15), f: Math.round(activePlan.fat * 0.15) },
+            dinner: { name: "Baked Herb Wild Salmon or Tofu with Roasted Root Vegetables", kcal: Math.round(activePlan.calories * 0.25), p: Math.round(activePlan.protein * 0.25), c: Math.round(activePlan.carbs * 0.25), f: Math.round(activePlan.fat * 0.25) }
+        };
+
+        const slots = [
+            { type: "Breakfast", icon: "sun", time: "8:00 AM", data: daySchedule.breakfast, badgeColor: "rgba(217, 119, 6, 0.12)", textColor: "#d97706" },
+            { type: "Lunch", icon: "utensils", time: "1:00 PM", data: daySchedule.lunch, badgeColor: "rgba(16, 185, 129, 0.12)", textColor: "#059669" },
+            { type: "Snack", icon: "coffee", time: "4:30 PM", data: daySchedule.snack, badgeColor: "rgba(147, 51, 234, 0.12)", textColor: "#9333ea" },
+            { type: "Dinner", icon: "moon", time: "7:30 PM", data: daySchedule.dinner, badgeColor: "rgba(2, 132, 199, 0.12)", textColor: "#0284c7" }
+        ];
+
+        scheduleContainer.innerHTML = slots.map(slot => {
+            const meal = slot.data || { name: `${slot.type} Meal`, kcal: 450, p: 30, c: 45, f: 12 };
+            const safeName = (meal.name || '').replace(/'/g, "\\'");
+            return `
+                <div class="card schedule-slot-card" style="padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between; background: var(--surface-light, rgba(0,0,0,0.01));">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span class="badge" style="background: ${slot.badgeColor}; color: ${slot.textColor}; font-weight: 750; font-size: 11px;">
+                                ${slot.type} · ${slot.time}
+                            </span>
+                            <span style="font-size: 15px; font-weight: 800; color: var(--forest);">${meal.kcal} <small style="font-size: 11px; font-weight: 600; color: var(--muted);">kcal</small></span>
+                        </div>
+                        <h4 style="font-size: 15px; font-weight: 800; color: var(--ink); margin: 0 0 6px;">${escapeHTML(meal.name)}</h4>
+                        <div class="meal-macros-inline" style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">
+                            <span>P: <b style="color: #059669;">${meal.p}g</b></span>
+                            <span>•</span>
+                            <span>C: <b style="color: #d97706;">${meal.c}g</b></span>
+                            <span>•</span>
+                            <span>F: <b style="color: #0284c7;">${meal.f}g</b></span>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline" style="width: 100%; justify-content: center; gap: 6px; font-size: 12px;" onclick="window.logPlannedMealToToday('${safeName}', ${meal.kcal}, ${meal.p}, ${meal.c}, ${meal.f}, '${slot.type}')">
+                            <i data-lucide="plus-circle" class="icon-xs"></i>
+                            <span>Log to Today's Diary</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.activatePlan = function (planId) {
+        const plans = getAllDietPlans();
+        const plan = plans.find(p => p.id === planId);
+        if (!plan) return;
+
+        localStorage.setItem(STORAGE_KEY_ACTIVE_PLAN, planId);
+        showToast(`✦ Activated '${plan.name}'!`);
+        renderDietPlans();
+    };
+
+    window.syncActivePlanToGoals = function () {
+        const activePlan = getActivePlan();
+        const currentGoals = Storage.getGoals();
+        const updated = {
+            ...currentGoals,
+            calories: activePlan.calories,
+            protein: activePlan.protein,
+            carbs: activePlan.carbs,
+            fat: activePlan.fat
+        };
+        Storage.saveGoals(updated);
+        renderDashboard();
+        renderGoals();
+        showToast(`✦ Daily targets synced with '${activePlan.name}'!`);
+    };
+
+    window.logPlannedMealToToday = function (name, kcal, p, c, f, type) {
+        const newMeal = {
+            id: `meal-${Date.now()}`,
+            name: name,
+            type: type || "Lunch",
+            calories: Number(kcal) || 400,
+            protein: Number(p) || 25,
+            carbs: Number(c) || 45,
+            fat: Number(f) || 12,
+            date: getTodayDateString(0),
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            image: "assets/nourish-bowl.png"
+        };
+
+        Storage.addMeal(newMeal);
+        showToast(`✦ Logged '${name}' (${kcal} kcal) to today's diary!`);
+        renderDashboard();
+        renderHistory();
+        renderReports();
+        renderLucide();
+    };
+
+    window.nutriScanOpenCustomPlanModal = function () {
+        openModal('modal-custom-plan');
+    };
+
+    window.handleSaveCustomPlan = function () {
+        const nameInput = document.getElementById('custom-plan-name');
+        const descInput = document.getElementById('custom-plan-desc');
+        const kcalInput = document.getElementById('custom-plan-kcal');
+        const pInput = document.getElementById('custom-plan-protein');
+        const cInput = document.getElementById('custom-plan-carbs');
+        const fInput = document.getElementById('custom-plan-fat');
+
+        if (!nameInput || !nameInput.value.trim()) {
+            showToast('Please enter a plan name', true);
+            return;
+        }
+
+        const kcal = parseInt(kcalInput.value, 10) || 2000;
+        const p = parseInt(pInput.value, 10) || 130;
+        const c = parseInt(cInput.value, 10) || 220;
+        const f = parseInt(fInput.value, 10) || 65;
+
+        const newPlan = {
+            id: `custom-plan-${Date.now()}`,
+            name: nameInput.value.trim(),
+            badge: "Custom Blueprint",
+            desc: descInput ? descInput.value.trim() : "Custom nutrition plan tailored to your personal requirements.",
+            calories: kcal,
+            protein: p,
+            carbs: c,
+            fat: f,
+            macroSplit: `${p}g P · ${c}g C · ${f}g F`,
+            icon: "star",
+            focus: "Personalized whole foods and daily nutrition targets"
+        };
+
+        const existingCustom = getCustomPlans();
+        existingCustom.push(newPlan);
+        localStorage.setItem(STORAGE_KEY_PLANS, JSON.stringify(existingCustom));
+        localStorage.setItem(STORAGE_KEY_ACTIVE_PLAN, newPlan.id);
+
+        closeModal('modal-custom-plan');
+        showToast(`✦ Custom plan '${newPlan.name}' saved and activated!`);
+        renderDietPlans();
+    };
+
+    // -------------------------------------------------------------
     // INITIALIZATION ON DOM READY
     // -------------------------------------------------------------
     document.addEventListener('DOMContentLoaded', () => {
@@ -4992,6 +5547,7 @@
         initModals();
         initPasswordMeter();
         initExportModal();
+        initDietPlans();
         initNutriBot();
         initCommandPalette();
 

@@ -47,11 +47,15 @@
                     <i data-lucide="target"></i>
                     <span>Goals & targets</span>
                 </div>
+                <div class="navitem" data-view="plans">
+                    <i data-lucide="clipboard-list"></i>
+                    <span>Diet Plans</span>
+                </div>
                 <div class="navitem" data-view="profile">
                     <i data-lucide="user"></i>
                     <span>Profile & settings</span>
                 </div>
-                <div class="navitem" id="navitem-nutribot" title="Chat with NutriBot AI (Local Qwen3-VL)">
+                <div class="navitem" id="navitem-nutribot" title="Chat with NutriBot AI Assistant">
                     <i data-lucide="bot"></i>
                     <span>NutriBot AI</span>
                     <span class="badge" style="font-size: 10px; margin-left: auto; background: var(--sage); color: var(--forest); font-weight: 700;">AI</span>
@@ -95,7 +99,7 @@
                         <span id="backend-status-text">Backend Checking...</span>
                     </div>
 
-                    <button class="iconbtn" id="btn-topbar-nutribot" title="Chat with NutriBot AI (Local Qwen3-VL)">
+                    <button class="iconbtn" id="btn-topbar-nutribot" title="Chat with NutriBot AI Assistant">
                         <i data-lucide="bot"></i>
                     </button>
 
@@ -276,7 +280,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 22px;">
                     <div>
                         <h1 class="hello">Dual-View Food Scanner</h1>
-                        <div class="sub">Two photos of your plate. Computer vision volumetric estimation & CatBoost nutritional regression.</div>
+                        <div class="sub">Two photos of your plate. Computer vision 3D volumetric estimation & precision nutritional regression.</div>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button type="button" class="btn btn-outline" onclick="clearUploads()">
@@ -424,22 +428,47 @@
             </section>
 
             <!-- ============================================== -->
-            <!-- VIEW 3: MEAL HISTORY -->
+            <!-- VIEW 3: MEAL DIARY & TIMELINE                 -->
             <!-- ============================================== -->
             <section id="view-history" class="view-screen">
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
                     <div>
-                        <h1 class="hello">Meal history</h1>
-                        <div class="sub">A complete diary of your recorded meals, calories, and macronutrients.</div>
+                        <h1 class="hello">Meal Diary & Timeline</h1>
+                        <div class="sub">A complete nutritional timeline of your recorded meals, calories, and macronutrient balance.</div>
                     </div>
-                    <button class="btn" id="btn-add-manual-meal">
-                        <i data-lucide="plus"></i>
-                        <span>Add Meal Manually</span>
-                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-outline" onclick="switchView('scanner')">
+                            <i data-lucide="camera" class="icon-sm"></i>
+                            <span>Scan Plate</span>
+                        </button>
+                        <button class="btn btn-forest" id="btn-add-manual-meal">
+                            <i data-lucide="plus" class="icon-sm"></i>
+                            <span>Add Meal</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 14-Day Consistency & Streak Activity Bar -->
+                <div class="card history-streak-card" style="margin-top: 18px; padding: 14px 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 18px;">🔥</span>
+                            <div>
+                                <b style="font-size: 13px; color: var(--ink);">Logging Streak: <span id="history-streak-count" style="color: var(--forest); font-weight: 800;">5 Days</span></b>
+                                <div class="tiny" style="color: var(--muted);">Consistent tracking leads to lasting habits</div>
+                            </div>
+                        </div>
+                        <span class="badge" style="background: rgba(155, 203, 53, 0.15); color: var(--forest); font-weight: 700; font-size: 11px;">
+                            <i data-lucide="check" class="icon-xs" style="margin-right: 4px;"></i> On Track
+                        </span>
+                    </div>
+                    <div class="history-streak-days" id="history-streak-days" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
+                        <!-- Generated via JS: 14 interactive date pills -->
+                    </div>
                 </div>
 
                 <!-- Timeframe Filters & Search -->
-                <div class="filters-bar">
+                <div class="filters-bar" style="margin-top: 16px;">
                     <button class="filter active" data-history-filter="today">Today</button>
                     <button class="filter" data-history-filter="week">This week</button>
                     <button class="filter" data-history-filter="month">This month</button>
@@ -453,42 +482,35 @@
 
                 <!-- Meal Type Secondary Filters -->
                 <div class="filters-bar" style="margin-top: 0; margin-bottom: 20px;">
-                    <span class="tiny" style="font-weight: 750; margin-right: 4px;">TYPE:</span>
-                    <button class="diet-tag active" data-type-filter="all">All</button>
+                    <span class="tiny" style="font-weight: 750; margin-right: 4px;">FILTER:</span>
+                    <button class="diet-tag active" data-type-filter="all">All Meals</button>
                     <button class="diet-tag" data-type-filter="Breakfast">Breakfast</button>
                     <button class="diet-tag" data-type-filter="Lunch">Lunch</button>
                     <button class="diet-tag" data-type-filter="Dinner">Dinner</button>
                     <button class="diet-tag" data-type-filter="Snack">Snacks</button>
                 </div>
 
-                <!-- History Log Card -->
-                <div class="card">
-                    <div class="section-head" style="margin-top: 0;">
-                        <h2 id="history-group-header">Today's Log</h2>
-                        <span class="badge" id="history-count-badge">0 meals logged</span>
-                    </div>
-
-                    <div class="meal-list" id="history-meals-container">
-                        <!-- Populated dynamically via JS -->
-                    </div>
+                <!-- History Log Group Header & Dynamic Meals Container -->
+                <div id="history-meals-container">
+                    <!-- Populated dynamically via JS: Date-grouped cards with daily macro totals -->
                 </div>
 
                 <!-- History Summary Cards -->
-                <div class="grid g3" style="margin-top: 18px;">
+                <div class="grid g3" style="margin-top: 24px;">
                     <div class="card">
-                        <span class="kicker">THIS WEEK</span>
+                        <span class="kicker">TOTAL MEALS LOGGED</span>
                         <div class="value" id="hist-stat-week-count">12 meals</div>
-                        <div class="tiny">Logged across active days</div>
+                        <div class="tiny">Across your active tracking period</div>
                     </div>
                     <div class="card">
-                        <span class="kicker">FAVOURITE MEAL</span>
+                        <span class="kicker">MOST FREQUENT CHOICE</span>
                         <div class="value" style="font-size: 20px;" id="hist-stat-fav-name">Garden nourish bowl</div>
-                        <div class="tiny">Your most frequent choice</div>
+                        <div class="tiny">Your recurring staple meal</div>
                     </div>
                     <div class="card">
-                        <span class="kicker">AVERAGE CALORIES</span>
+                        <span class="kicker">DAILY AVERAGE INTAKE</span>
                         <div class="value" id="hist-stat-avg-kcal">1,820 kcal</div>
-                        <div class="tiny">Per day average this week</div>
+                        <div class="tiny">Average recorded daily calories</div>
                     </div>
                 </div>
             </section>
@@ -712,7 +734,105 @@
             </section>
 
             <!-- ============================================== -->
-            <!-- VIEW 6: PROFILE & SETTINGS -->
+            <!-- VIEW 6: DIET PLANS & NUTRITION FRAMEWORKS     -->
+            <!-- ============================================== -->
+            <section id="view-plans" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+                    <div>
+                        <h1 class="hello">Diet Plans & Frameworks</h1>
+                        <div class="sub">Structured nutritional protocols, targeted macro allocations, and daily meal plans.</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-forest" id="btn-create-custom-plan" onclick="window.nutriScanOpenCustomPlanModal()">
+                            <i data-lucide="plus-circle" class="icon-sm"></i>
+                            <span>Create Custom Plan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Plan Spotlight Card -->
+                <div class="card active-plan-hero-card" id="active-plan-hero" style="border: 2px solid rgba(155, 203, 53, 0.4); background: linear-gradient(135deg, rgba(36, 74, 44, 0.04), rgba(155, 203, 53, 0.08));">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <span class="badge" style="background: var(--forest); color: white; font-weight: 700; padding: 4px 10px; font-size: 11px;">
+                                <i data-lucide="check-circle" class="icon-xs" style="margin-right: 4px;"></i> ACTIVE PLAN
+                            </span>
+                            <h2 style="font-size: 22px; font-weight: 800; margin: 8px 0 4px; color: var(--forest);" id="active-plan-title">High-Protein Lean Cut</h2>
+                            <p class="tiny" style="color: var(--muted); max-width: 580px; margin: 0;" id="active-plan-desc">Accelerate fat loss while maintaining lean muscle tissue through a calibrated deficit and elevated protein distribution.</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-outline" id="btn-sync-plan-to-goals" onclick="window.syncActivePlanToGoals()" title="Apply this plan's calorie & macro targets to your daily goals">
+                                <i data-lucide="target" class="icon-sm"></i>
+                                <span>Sync to Daily Goals</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Target Macro Stats Grid -->
+                    <div class="grid g4" style="margin-top: 18px;">
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px;">DAILY TARGET</span>
+                            <div style="font-size: 20px; font-weight: 800; color: var(--forest);" id="active-plan-kcal">1,800 <small style="font-size: 12px; font-weight: 600; color: var(--muted);">kcal</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Moderate Calorie Deficit</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #059669;">PROTEIN (40%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #059669;" id="active-plan-protein">180g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Muscle Preservation</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #d97706;">CARBS (35%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #d97706;" id="active-plan-carbs">158g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Workout Glycogen</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #0284c7;">FAT (25%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #0284c7;" id="active-plan-fat">50g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Hormonal Health</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Curated Plans Catalog -->
+                <div class="section-head" style="margin-top: 28px;">
+                    <div>
+                        <h2 style="font-size: 18px; font-weight: 800; margin: 0;">Explore Nutrition Plans</h2>
+                        <span class="tiny" style="color: var(--muted);">Select a blueprint that aligns with your lifestyle and physique targets.</span>
+                    </div>
+                </div>
+
+                <div class="grid g3" id="plans-catalog-grid" style="gap: 16px;">
+                    <!-- Populated dynamically with the 6 evidence-based plans -->
+                </div>
+
+                <!-- Weekly Meal Schedule & Daily Menu -->
+                <div class="card" style="margin-top: 28px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+                        <div>
+                            <h2 style="font-size: 18px; font-weight: 800; margin: 0;">Weekly Meal Planner</h2>
+                            <span class="tiny" style="color: var(--muted);">Curated meal suggestions for your active plan. Click "Log to Today" to record any meal in 1 click!</span>
+                        </div>
+                        <!-- Day Selector -->
+                        <div class="filters-bar" id="plan-day-selector" style="margin: 0;">
+                            <button class="filter active" data-plan-day="0">Mon</button>
+                            <button class="filter" data-plan-day="1">Tue</button>
+                            <button class="filter" data-plan-day="2">Wed</button>
+                            <button class="filter" data-plan-day="3">Thu</button>
+                            <button class="filter" data-plan-day="4">Fri</button>
+                            <button class="filter" data-plan-day="5">Sat</button>
+                            <button class="filter" data-plan-day="6">Sun</button>
+                        </div>
+                    </div>
+
+                    <!-- Daily Meal Schedule Slots (Breakfast, Lunch, Snack, Dinner) -->
+                    <div class="grid g2" id="plan-daily-schedule-slots" style="gap: 14px;">
+                        <!-- Generated dynamically via JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 7: PROFILE & SETTINGS -->
             <!-- ============================================== -->
             <section id="view-profile" class="view-screen">
                 <h1 class="hello">Your space & biometrics</h1>
@@ -780,8 +900,8 @@
                         <div class="settings-row" id="row-gemini-check">
                             <div class="settings-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;"><i data-lucide="sparkles"></i></div>
                             <div class="setting-meta">
-                                <b>Gemini AI Key Router</b>
-                                <span id="profile-gemini-desc">Checking key pool...</span>
+                                <b>AI Cloud Vision Engine</b>
+                                <span id="profile-gemini-desc">Checking engine status...</span>
                             </div>
                             <button class="btn btn-sm btn-outline" id="btn-open-gemini-modal" onclick="window.nutriScanOpenGeminiModal()">Manage Keys</button>
                         </div>
@@ -848,10 +968,14 @@
         </div>
         <div class="mob-nav-btn" data-view="history">
             <i data-lucide="clock"></i>
-            <span>History</span>
+            <span>Diary</span>
         </div>
         <div class="mob-nav-scan" data-view="scanner" title="Scan Meal">
             <i data-lucide="camera"></i>
+        </div>
+        <div class="mob-nav-btn" data-view="plans">
+            <i data-lucide="clipboard-list"></i>
+            <span>Plans</span>
         </div>
         <div class="mob-nav-btn" data-view="reports">
             <i data-lucide="bar-chart-2"></i>
@@ -1497,7 +1621,7 @@
     </div>
 
     <!-- ============================================== -->
-    <!-- MODAL 11: GEMINI AI MULTI-KEY ROUTER CONFIG    -->
+    <!-- MODAL 11: AI CLOUD ENGINE & KEY VAULT CONFIG   -->
     <!-- ============================================== -->
     <div class="modal-overlay" id="modal-gemini-config">
         <div class="modal" style="max-width: 520px;">
@@ -1505,7 +1629,7 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: linear-gradient(135deg, #10b981, #06b6d4); color: white;"><i data-lucide="sparkles"></i></span>
                     <div>
-                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Gemini AI Key Router</h3>
+                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">AI Cloud Engine & Key Vault</h3>
                         <div class="tiny" style="color: var(--muted);">Round-robin key pool with dynamic 429 failover</div>
                     </div>
                 </div>
@@ -1513,7 +1637,7 @@
             </div>
             <div class="modal-body" style="padding-top: 14px;">
                 <p class="tiny" style="margin-bottom: 14px; line-height: 1.5; color: var(--muted);">
-                    Configure multiple Google Gemini API keys. Keys are encrypted with an AES-256 authenticated cipher and stored in Supabase PostgreSQL with automated round-robin rotation and HTTP 429 rate-limit failover.
+                    Configure high-throughput AI API keys. Keys are encrypted with an AES-256 authenticated cipher and stored with automated round-robin rotation and rate-limit failover.
                 </p>
 
                 <!-- Supabase Cloud Vault Badge -->
@@ -1521,11 +1645,11 @@
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <i data-lucide="shield-check" style="width: 18px; height: 18px; color: #10b981;"></i>
                         <div>
-                            <div style="font-size: 13px; font-weight: 700; color: var(--ink);">Supabase Encrypted Vault</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--ink);">Encrypted Security Vault</div>
                             <div class="tiny" style="color: var(--muted);" id="gemini-vault-status-text">AES-256 authenticated cipher · Zero plaintext in DB</div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-sync-supabase" onclick="window.handleSyncSupabaseKeys()" title="Sync encrypted keys from Supabase Vault" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-sync-supabase" onclick="window.handleSyncSupabaseKeys()" title="Sync encrypted keys from Vault" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
                         <i data-lucide="cloud-download" class="icon-sm"></i> Sync Cloud
                     </button>
                 </div>
@@ -1544,17 +1668,17 @@
                 <!-- Add Keys Input -->
                 <div class="form-group" style="margin-bottom: 12px;">
                     <label class="form-label" for="cfg-gemini-new-key">Add API Key(s)</label>
-                    <textarea id="cfg-gemini-new-key" class="form-input" rows="2" placeholder="Paste one or more Gemini API keys (comma or newline separated, starting with AIzaSy...)" style="font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-                    <div class="tiny" style="color: var(--muted); margin-top: 4px;">Get free API keys at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color: var(--primary);">Google AI Studio</a>. Keys are never logged in plain text.</div>
+                    <textarea id="cfg-gemini-new-key" class="form-input" rows="2" placeholder="Paste one or more API keys (comma or newline separated)..." style="font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <div class="tiny" style="color: var(--muted); margin-top: 4px;">High-throughput cloud vision keys. Keys are stored encrypted with zero plaintext exposure.</div>
                 </div>
 
                 <!-- Model Selection -->
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label class="form-label" for="cfg-gemini-model">Gemini Model</label>
+                    <label class="form-label" for="cfg-gemini-model">Vision Engine Mode</label>
                     <select id="cfg-gemini-model" class="form-input" style="font-size: 13px;" onchange="window.handleChangeGeminiModel()">
-                        <option value="gemini-3-flash-preview" selected>Gemini 3 Flash Preview (Recommended: fastest, high throughput)</option>
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini-3-flash-preview" selected>Ultra-Fast Vision (High Throughput & Accuracy)</option>
+                        <option value="gemini-2.5-flash">Standard Precision Vision</option>
+                        <option value="gemini-2.5-pro">Deep Nutritional Analysis Mode</option>
                     </select>
                 </div>
 
@@ -1673,6 +1797,57 @@
     </div>
 
     <!-- ============================================== -->
+    <!-- MODAL 15: CREATE CUSTOM DIET PLAN             -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-custom-plan">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: var(--sage); color: var(--forest);"><i data-lucide="clipboard-list"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Create Custom Diet Plan</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-custom-plan" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <form id="form-custom-plan" onsubmit="event.preventDefault(); window.handleSaveCustomPlan();">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="custom-plan-name">Plan Name</label>
+                        <input type="text" id="custom-plan-name" class="form-input" placeholder="e.g. Marathon Prep or Keto Cutting" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="custom-plan-desc">Short Description / Goal</label>
+                        <input type="text" id="custom-plan-desc" class="form-input" placeholder="e.g. High carb endurance fueling with clean proteins">
+                    </div>
+                    <div class="grid g2" style="gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-kcal">Daily Calories (kcal)</label>
+                            <input type="number" id="custom-plan-kcal" class="form-input" value="2000" min="1000" max="6000" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-protein">Daily Protein (g)</label>
+                            <input type="number" id="custom-plan-protein" class="form-input" value="130" min="20" max="400" required>
+                        </div>
+                    </div>
+                    <div class="grid g2" style="gap: 12px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-carbs">Daily Carbs (g)</label>
+                            <input type="number" id="custom-plan-carbs" class="form-input" value="220" min="0" max="800" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-fat">Daily Fat (g)</label>
+                            <input type="number" id="custom-plan-fat" class="form-input" value="65" min="10" max="300" required>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" data-close-modal="modal-custom-plan">Cancel</button>
+                        <button type="submit" class="btn btn-forest">Save & Activate Plan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
     <!-- NUTRIBOT AI AGENTIC DRAWER & FLOATING LAUNCHER -->
     <!-- ============================================== -->
     <div class="nutribot-backdrop" id="nutribot-backdrop"></div>
@@ -1687,7 +1862,7 @@
                         <h3 class="nutribot-title">NutriBot AI</h3>
                         <span class="nutribot-model-badge" id="nutribot-model-badge">
                             <span class="nutribot-status-dot" id="nutribot-status-dot"></span>
-                            <span id="nutribot-model-name">qwen3-vl:2b</span>
+                            <span id="nutribot-model-name">AI Assistant</span>
                         </span>
                     </div>
                     <div class="nutribot-subtitle">Autonomous Nutrition & Diary Assistant</div>
