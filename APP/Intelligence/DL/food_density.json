@@ -1,0 +1,189 @@
+{
+  "cooked_grain": {
+    "min": 0.65,
+    "max": 0.95,
+    "examples": [
+      "rice",
+      "steamed-rice",
+      "biryani",
+      "pulao",
+      "khichdi",
+      "bisi-bele-bath",
+      "noodles",
+      "pasta"
+    ]
+  },
+  "cooked_meat": {
+    "min": 0.85,
+    "max": 1.1,
+    "examples": [
+      "chicken",
+      "mutton",
+      "lamb",
+      "fish",
+      "beef",
+      "pork"
+    ]
+  },
+  "legume_or_curry": {
+    "min": 0.85,
+    "max": 1.15,
+    "examples": [
+      "dal",
+      "sambar",
+      "rasam",
+      "rajma",
+      "channa",
+      "chole",
+      "curry",
+      "gravy",
+      "pappu",
+      "pachi-pulusu",
+      "salan"
+    ]
+  },
+  "leafy_salad": {
+    "min": 0.12,
+    "max": 0.28,
+    "examples": [
+      "salad",
+      "green-salad",
+      "leafy-salad",
+      "lettuce",
+      "spinach-salad",
+      "herbs",
+      "mixed-greens",
+      "arugula"
+    ]
+  },
+  "vegetable": {
+    "min": 0.5,
+    "max": 0.9,
+    "examples": [
+      "vegetable",
+      "aloo",
+      "potato",
+      "gobi",
+      "cabbage",
+      "poriyal",
+      "fry",
+      "bhindi",
+      "beetroot"
+    ]
+  },
+  "sauce": {
+    "min": 0.85,
+    "max": 1.15,
+    "examples": [
+      "chutney",
+      "pickle",
+      "sauce",
+      "gravy"
+    ]
+  },
+  "rich_sauce": {
+    "min": 0.95,
+    "max": 1.2,
+    "examples": [
+      "butter-masala-gravy",
+      "korma-gravy",
+      "creamy-sauce",
+      "mayonnaise",
+      "tahini",
+      "peanut-sauce",
+      "hollandaise"
+    ]
+  },
+  "fat_oil": {
+    "min": 0.88,
+    "max": 0.94,
+    "examples": [
+      "oil",
+      "ghee",
+      "butter",
+      "margarine",
+      "vanaspati",
+      "cooking-oil",
+      "mustard-oil",
+      "olive-oil"
+    ]
+  },
+  "puffed_cereal": {
+    "min": 0.08,
+    "max": 0.16,
+    "examples": [
+      "murmura",
+      "puffed-rice",
+      "kurmura",
+      "popcorn",
+      "pori",
+      "puffed-cereal",
+      "rice-crisp",
+      "bhel"
+    ]
+  },
+  "bread": {
+    "min": 0.35,
+    "max": 0.55,
+    "examples": [
+      "phulka",
+      "roti",
+      "chapati",
+      "naan",
+      "paratha",
+      "bread"
+    ]
+  },
+  "papad": {
+    "min": 0.15,
+    "max": 0.3,
+    "examples": [
+      "papad",
+      "pappadam",
+      "appalam"
+    ]
+  },
+  "fruit": {
+    "min": 0.55,
+    "max": 1.05,
+    "examples": [
+      "fruit",
+      "watermelon",
+      "papaya",
+      "banana",
+      "muskmelon",
+      "apple",
+      "mango"
+    ]
+  },
+  "dairy": {
+    "min": 0.95,
+    "max": 1.15,
+    "examples": [
+      "curd",
+      "dahi",
+      "raita",
+      "paneer",
+      "cheese",
+      "yogurt"
+    ]
+  },
+  "sweets": {
+    "min": 0.9,
+    "max": 1.25,
+    "examples": [
+      "payasam",
+      "kheer",
+      "halwa",
+      "gulab jamun",
+      "sweet"
+    ]
+  },
+  "mixed_food": {
+    "min": 0.7,
+    "max": 1.1,
+    "examples": [
+      "other foods"
+    ]
+  }
+}

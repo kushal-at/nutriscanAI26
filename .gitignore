@@ -10,16 +10,17 @@ __pycache__/
 .env
 *.key
 *.pem
-.gemini_vault.key
-vision/.gemini_vault.key
-gemini_keys.json
-vision/gemini_keys.json
-logs/
 *.log
 *.bak
 *.tmp
 catboost_info/
+logs/
 scratch/
+APP/logs/
+APP/vision/.gemini_vault.key
+APP/vision/gemini_keys.json
+vision/.gemini_vault.key
+vision/gemini_keys.json
 
 # OS and IDE files
 .DS_Store
@@ -27,7 +28,8 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Non-project directories (explicitly excluded)
+# Non-app reference & temporary directories
+REF/
 Temp/
 uiRedesign/
 .agents/

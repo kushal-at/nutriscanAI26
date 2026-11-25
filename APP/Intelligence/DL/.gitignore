@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.gemini_vault.key
+gemini_keys.json
+*.log
+.env

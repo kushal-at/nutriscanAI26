@@ -1,0 +1,1950 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="NutriScanAI — Dual-view AI food segmentation, nutrition scanner & macro diary">
+    <title>NutriScanAI — AI Food Diary & Scanner</title>
+    <link rel="icon" type="image/png" href="images/icon.png">
+    <link rel="apple-touch-icon" href="images/icon.png">
+    <link rel="stylesheet" href="style.css?v=5.0">
+    <!-- Local Lucide & Supabase scripts for 100% offline support -->
+    <script src="lucide.min.js"></script>
+    <script src="supabase.min.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="sync.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- DESKTOP SIDEBAR -->
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brandmark"><i data-lucide="flower-2"></i></span>
+                <span class="brand-name">NutriScan<span class="brand-accent">AI</span></span>
+            </div>
+
+            <div class="navcap">YOUR SPACE</div>
+            <nav class="navlist">
+                <div class="navitem active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </div>
+                <div class="navitem" data-view="scanner">
+                    <i data-lucide="camera"></i>
+                    <span>Food scanner</span>
+                </div>
+                <div class="navitem" data-view="history">
+                    <i data-lucide="clock"></i>
+                    <span>Meal history</span>
+                </div>
+                <div class="navitem" data-view="reports">
+                    <i data-lucide="bar-chart-2"></i>
+                    <span>Diet reports</span>
+                </div>
+                <div class="navitem" data-view="goals">
+                    <i data-lucide="target"></i>
+                    <span>Goals & targets</span>
+                </div>
+                <div class="navitem" data-view="plans">
+                    <i data-lucide="clipboard-list"></i>
+                    <span>Diet Plans</span>
+                </div>
+                <div class="navitem" data-view="profile">
+                    <i data-lucide="user"></i>
+                    <span>Profile & settings</span>
+                </div>
+                <div class="navitem" id="navitem-nutribot" title="Chat with NutriBot AI Assistant">
+                    <i data-lucide="bot"></i>
+                    <span>NutriBot AI</span>
+                    <span class="badge" style="font-size: 10px; margin-left: auto; background: var(--sage); color: var(--forest); font-weight: 700;">AI</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="streak-card">
+                    <b><i data-lucide="sparkles" class="icon-sm"></i> Small steps add up.</b>
+                    <p>NutriScanAI helps you nourish your body with balanced portions and mindful choices.</p>
+                    <span class="badge" id="sidebar-streak-badge">Keep your streak ✦</span>
+                </div>
+
+                <div class="side-profile" id="side-profile-trigger">
+                    <div class="avatar" id="side-avatar">N</div>
+                    <div style="flex: 1; min-width: 0;">
+                        <b style="font-size: 13px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="side-name">NutriScan User</b>
+                        <div class="tiny" id="side-tagline">Initializing...</div>
+                    </div>
+                    <i data-lucide="more-horizontal" class="icon-sm" style="color: var(--muted);"></i>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN VIEW CONTAINER -->
+        <main class="main">
+            <!-- TOPBAR -->
+            <div class="topbar">
+                <div class="crumb">
+                    NutriScanAI <span style="color: var(--muted-light);">/</span> <span id="desktop-crumb-page">Dashboard</span>
+                </div>
+
+                <div class="top-actions">
+                    <div class="backend-pill cloud-sync-pill" id="cloud-sync-pill" title="Supabase Cloud Database & Sync" onclick="window.nutriScanOpenAuthModal()">
+                        <span class="status-dot dot-guest" id="cloud-sync-dot"></span>
+                        <span id="cloud-sync-text">Guest Mode</span>
+                    </div>
+
+                    <div class="backend-pill" id="backend-status-pill" title="Python Backend Service Status">
+                        <span class="status-dot" id="backend-status-dot"></span>
+                        <span id="backend-status-text">Backend Checking...</span>
+                    </div>
+
+                    <button class="iconbtn" id="btn-topbar-nutribot" title="Chat with NutriBot AI Assistant">
+                        <i data-lucide="bot"></i>
+                    </button>
+
+                    <button class="iconbtn" id="btn-theme-toggle" title="Toggle Light/Dark Theme">
+                        <i data-lucide="moon" id="theme-toggle-icon"></i>
+                    </button>
+
+                    <button class="iconbtn" id="btn-quick-search" title="Command Palette & Search (Ctrl+K)">
+                        <i data-lucide="search"></i>
+                    </button>
+
+                    <div class="userchip" id="topbar-userchip" onclick="window.nutriScanOpenAuthModal()" title="Account & Cloud Sync">
+                        <div class="avatar" id="topbar-avatar">N</div>
+                        <span id="topbar-name">Account</span>
+                        <i data-lucide="chevron-down" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================== -->
+            <!-- VIEW 1: DASHBOARD -->
+            <!-- ============================================== -->
+            <section id="view-dashboard" class="view-screen active">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h1 class="hello">
+                            <span id="dash-greeting">Good morning, Alex</span>
+                            <span style="font-size: 24px;">☀️</span>
+                        </h1>
+                        <div class="sub">A little balance goes a long way. Here's your nutrition overview for today.</div>
+                    </div>
+                    <div class="badge" id="dash-streak-pill">
+                        <i data-lucide="flame" class="icon-sm"></i>
+                        <span id="dash-streak-count">5 day streak</span>
+                    </div>
+                </div>
+
+                <!-- Top Hero Grid: Calorie Ring Card + Inspiration Card -->
+                <div class="grid dash-hero-grid">
+                    <div class="card" style="padding: 24px;">
+                        <div class="section-head" style="margin: 0 0 10px;">
+                            <h2>Today's nutrition</h2>
+                            <span class="tiny" id="dash-date-str">Monday, Nov 16</span>
+                        </div>
+
+                        <div class="dash-calorie-split">
+                            <div class="ring-wrap">
+                                <div class="ring" id="dash-calorie-ring" style="--ring-pct: 64%;">
+                                    <div class="ring-content">
+                                        <span>TODAY</span>
+                                        <strong id="dash-ring-consumed">1,280</strong>
+                                        <span id="dash-ring-label">kcal</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="value" style="font-size: 32px;" id="dash-kcal-text">
+                                    1,280 <span style="font-size: 13px; font-weight: 600; color: var(--muted);">/ 2,000 kcal</span>
+                                </div>
+                                <span class="badge" id="dash-goal-pct-badge">64% of daily goal</span>
+                                <div class="tiny" style="margin-top: 10px;" id="dash-kcal-remaining">720 kcal remaining today</div>
+                            </div>
+                        </div>
+
+                        <div class="macro-mini">
+                            <div class="macro-card">
+                                <div class="macro-card-top">
+                                    <span class="kicker">Protein</span>
+                                    <div class="macro-icon-box"><i data-lucide="leaf" class="icon-sm"></i></div>
+                                </div>
+                                <b id="dash-macro-protein">62g</b>
+                                <span id="dash-macro-protein-pct">Protein · 62%</span>
+                            </div>
+
+                            <div class="macro-card">
+                                <div class="macro-card-top">
+                                    <span class="kicker">Carbs</span>
+                                    <div class="macro-icon-box"><i data-lucide="wheat" class="icon-sm"></i></div>
+                                </div>
+                                <b id="dash-macro-carbs">160g</b>
+                                <span id="dash-macro-carbs-pct">Carbs · 72%</span>
+                            </div>
+
+                            <div class="macro-card">
+                                <div class="macro-card-top">
+                                    <span class="kicker">Fat</span>
+                                    <div class="macro-icon-box"><i data-lucide="droplet" class="icon-sm"></i></div>
+                                </div>
+                                <b id="dash-macro-fat">52g</b>
+                                <span id="dash-macro-fat-pct">Fat · 80%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Daily Inspiration & Tip Card -->
+                    <div class="card" style="padding: 0; overflow: hidden; position: relative;">
+                        <img src="assets/nourish-bowl.png" alt="Nourish bowl" style="width: 100%; height: 210px; object-fit: cover;">
+                        <div style="padding: 20px 22px;">
+                            <span class="badge">MINDFUL HABIT</span>
+                            <h2 style="font-size: 19px; font-weight: 800; margin: 10px 0 5px; color: var(--ink);">Make room for color.</h2>
+                            <div class="tiny">Building a diverse plate with colorful vegetables and quality protein nurtures your microbiome and sustains all-day energy.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Water Tracker Widget -->
+                <div class="water-tracker-card">
+                    <div class="water-info">
+                        <div class="water-icon-circle"><i data-lucide="droplet" class="icon-lg"></i></div>
+                        <div class="water-text">
+                            <b id="dash-water-display">1,500 / 2,500 mL</b>
+                            <span id="dash-water-subtitle">Hydration Progress · 60% of daily target</span>
+                        </div>
+                    </div>
+                    <div class="water-actions">
+                        <button class="water-btn" id="btn-water-add-250"><i data-lucide="plus" class="icon-sm"></i> 250 mL</button>
+                        <button class="water-btn" id="btn-water-add-500"><i data-lucide="plus" class="icon-sm"></i> 500 mL</button>
+                        <button class="water-btn" id="btn-water-sub-250" title="Undo 250 mL"><i data-lucide="minus" class="icon-sm"></i></button>
+                        <button class="water-btn" id="btn-water-reset" title="Reset Today's Water" style="color: var(--muted);"><i data-lucide="refresh-cw" class="icon-sm"></i></button>
+                    </div>
+                </div>
+
+                <!-- Today's Meals Section -->
+                <div class="section-head">
+                    <h2>Today's meals</h2>
+                    <span class="link-btn" id="dash-view-history-link">
+                        View meal history <i data-lucide="arrow-right" class="icon-sm"></i>
+                    </span>
+                </div>
+
+                <div class="grid dash-activity-grid">
+                    <div class="card">
+                        <div class="meal-list" id="dash-meal-list">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Scanner Call To Action -->
+                    <div class="cta">
+                        <div style="position: relative; z-index: 2;">
+                            <h3>What's on your plate?</h3>
+                            <p>Capture dual-angle photos or snap with your live camera for AI food volume estimation.</p>
+                            <button class="btn" style="margin-top: 18px;" id="dash-cta-scan-btn">
+                                <i data-lucide="camera" class="icon-sm"></i>
+                                <span>Scan a meal</span>
+                                <i data-lucide="arrow-right" class="icon-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Week At A Glance Chart -->
+                <div class="section-head">
+                    <h2>Your week at a glance</h2>
+                    <span class="link-btn" id="dash-view-reports-link">
+                        Detailed reports <i data-lucide="arrow-right" class="icon-sm"></i>
+                    </span>
+                </div>
+
+                <div class="card">
+                    <div class="chart-container">
+                        <div class="chart" id="dash-week-chart">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+                    <div class="legend">
+                        <i class="dot"></i>
+                        <span>Daily calorie intake against target</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 2: FOOD SCANNER & NUTRITION ENGINE -->
+            <!-- ============================================== -->
+            <section id="view-scanner" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 22px;">
+                    <div>
+                        <h1 class="hello">Dual-View Food Scanner</h1>
+                        <div class="sub">Two photos of your plate. Computer vision 3D volumetric estimation & precision nutritional regression.</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-outline" onclick="clearUploads()">
+                            <i data-lucide="rotate-ccw" class="icon-sm"></i>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <!-- Image upload header & side-view toggle -->
+                    <div class="upload-zone-bar">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="upload-section-label" style="font-weight: 800; font-size: 15px;">Plate photos</span>
+                            <span class="badge">STEP 01</span>
+                        </div>
+                        <button type="button" id="addSideViewBtn" class="btn-add-side-opt" onclick="showSideView()">
+                            <i data-lucide="plus" class="icon-sm"></i> Add eye-level photo (optional)
+                        </button>
+                    </div>
+
+                    <div class="upload-grid" id="uploadGrid">
+                        <!-- Overhead view (Primary & Always visible) -->
+                        <div class="upload-zone" id="topUploadPanel">
+                            <div class="upload-zone-header">
+                                <label for="topImage"><strong>Overhead view</strong></label>
+                                <span class="badge">Required</span>
+                            </div>
+                            <span class="upload-hint">Directly above the plate — captures surface area and rim</span>
+                            <div class="upload-preview" id="topDropZone" onclick="document.getElementById('topImage').click()">
+                                <img id="topPreview" src="" alt="Overhead view" style="display: none;">
+                                <div id="topPlaceholder" class="upload-empty">
+                                    <div class="upload-icon"><i data-lucide="camera"></i></div>
+                                    <span class="upload-empty-text">Drop an image or select a photo</span>
+                                    <span class="upload-empty-sub">JPG, PNG or WebP</span>
+                                    <div class="upload-methods-row">
+                                        <button type="button" class="btn-upload-method" onclick="event.stopPropagation(); document.getElementById('topCameraInput').click();">
+                                            <i data-lucide="camera" class="icon-sm"></i> Camera
+                                        </button>
+                                        <button type="button" class="btn-upload-method" onclick="event.stopPropagation(); document.getElementById('topImage').click();">
+                                            <i data-lucide="folder-open" class="icon-sm"></i> Gallery
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="upload-replace-overlay">
+                                    <span>Replace image</span>
+                                </div>
+                            </div>
+                            <input type="file" id="topImage" accept="image/*" class="file-input-hidden" style="display: none;">
+                            <input type="file" id="topCameraInput" accept="image/*" capture="environment" class="file-input-hidden" style="display: none;">
+                        </div>
+
+                        <!-- Eye-level view (Optional, toggleable) -->
+                        <div class="upload-zone upload-zone-optional" id="sideUploadPanel" style="display: none;">
+                            <div class="upload-zone-header">
+                                <div class="upload-header-left">
+                                    <label for="sideImage"><strong>Eye-level view</strong></label>
+                                    <span class="badge badge-info">Optional</span>
+                                </div>
+                                <button type="button" class="btn-remove-side" onclick="hideSideView()" title="Remove eye-level view">
+                                    ✕ Remove
+                                </button>
+                            </div>
+                            <span class="upload-hint">At plate level — captures depth and food mound height</span>
+                            <div class="upload-preview" id="sideDropZone" onclick="document.getElementById('sideImage').click()">
+                                <img id="sidePreview" src="" alt="Eye-level view" style="display: none;">
+                                <div id="sidePlaceholder" class="upload-empty">
+                                    <div class="upload-icon"><i data-lucide="image"></i></div>
+                                    <span class="upload-empty-text">Drop an image or select a photo</span>
+                                    <span class="upload-empty-sub">Optional depth reference</span>
+                                    <div class="upload-methods-row">
+                                        <button type="button" class="btn-upload-method" onclick="event.stopPropagation(); document.getElementById('sideCameraInput').click();">
+                                            <i data-lucide="camera" class="icon-sm"></i> Camera
+                                        </button>
+                                        <button type="button" class="btn-upload-method" onclick="event.stopPropagation(); document.getElementById('sideImage').click();">
+                                            <i data-lucide="folder-open" class="icon-sm"></i> Gallery
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="upload-replace-overlay">
+                                    <span>Replace image</span>
+                                </div>
+                            </div>
+                            <input type="file" id="sideImage" accept="image/*" class="file-input-hidden" style="display: none;">
+                            <input type="file" id="sideCameraInput" accept="image/*" capture="environment" class="file-input-hidden" style="display: none;">
+                        </div>
+                    </div>
+
+                    <!-- Example Quick Load Presets -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0; flex-wrap: wrap; gap: 8px;">
+                        <span class="tiny" style="font-weight: 700;">Or try an example dish:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="filter" id="btn-sample-toast" style="padding: 5px 12px; font-size: 11px;">
+                                <i data-lucide="sparkles" class="icon-sm"></i> Avocado Toast
+                            </button>
+                            <button type="button" class="filter" id="btn-sample-bowl" style="padding: 5px 12px; font-size: 11px;">
+                                <i data-lucide="sparkles" class="icon-sm"></i> Nourish Bowl
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Calibration & Controls Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;" class="dash-hero-grid">
+                        <div class="form-group">
+                            <label for="plateDiameter" class="form-label">Plate / Bowl Size & Calibration</label>
+                            <select id="plateDiameter" class="form-select">
+                                <optgroup label="🥣 Bowls">
+                                    <option value="12">12 cm — Small snack / dipping bowl</option>
+                                    <option value="14">14 cm — Cereal / rice / side bowl</option>
+                                    <option value="16">16 cm — Soup / oatmeal bowl</option>
+                                    <option value="18">18 cm — Grain / poke / nourish bowl</option>
+                                    <option value="20">20 cm — Ramen / pho / deep noodle bowl</option>
+                                    <option value="22">22 cm — Large salad / serving bowl</option>
+                                </optgroup>
+                                <optgroup label="🍽️ Plates">
+                                    <option value="15">15 cm — Bread & butter plate / saucer</option>
+                                    <option value="18">18 cm — Dessert / appetizer plate</option>
+                                    <option value="20">20 cm — Small / breakfast plate</option>
+                                    <option value="22">22 cm — Medium / bistro lunch plate</option>
+                                    <option value="25" selected>25 cm — Standard dinner plate (Default)</option>
+                                    <option value="27">27 cm — Wide restaurant dinner plate</option>
+                                    <option value="30">30 cm — Large steak / charger plate</option>
+                                    <option value="32">32 cm — Large serving platter / buffet tray</option>
+                                </optgroup>
+                            </select>
+                            <span class="tiny">Reference diameter for pixel-to-centimetre ellipse calibration</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="scanFoodHint" class="form-label">Food hint / notes (optional)</label>
+                            <input type="text" id="scanFoodHint" class="form-input" placeholder="e.g. Avocado Toast with Egg, Steamed Rice with Dal">
+                            <span class="tiny">Assists VLM segmentation on complex multi-ingredient dishes</span>
+                        </div>
+                    </div>
+
+                    <button id="analyzeButton" class="btn btn-forest" style="width: 100%; margin-top: 20px; font-size: 14px; padding: 14px 20px;" onclick="analyzeFood()">
+                        <i data-lucide="scan"></i>
+                        <span>Analyze meal</span>
+                    </button>
+                </div>
+
+                <!-- Live Result Container: Stepper, Totals, Interactive Tray, Tables & Actions -->
+                <div id="result">
+                    <div class="empty-state card" style="text-align: center; padding: 36px 20px;">
+                        <div class="empty-state-icon" style="font-size: 38px; margin-bottom: 8px;">🍽️</div>
+                        <h3 class="empty-state-heading" style="font-size: 16px; font-weight: 800; color: var(--ink);">No meal analyzed yet</h3>
+                        <p class="empty-state-body tiny" style="margin-top: 4px;">Upload an overhead photo of your plate, then click Analyze.</p>
+                    </div>
+                </div>
+
+                <!-- Recent Scans Gallery -->
+                <div class="section-head" style="margin-top: 36px;">
+                    <h2>Recent Scans</h2>
+                    <span class="link-btn" id="scan-view-all-history">View all in history →</span>
+                </div>
+                <div class="grid g4" id="scan-recent-gallery">
+                    <!-- Populated dynamically -->
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 3: MEAL DIARY & TIMELINE                 -->
+            <!-- ============================================== -->
+            <section id="view-history" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h1 class="hello">Meal Diary & Timeline</h1>
+                        <div class="sub">A complete nutritional timeline of your recorded meals, calories, and macronutrient balance.</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-outline" onclick="switchView('scanner')">
+                            <i data-lucide="camera" class="icon-sm"></i>
+                            <span>Scan Plate</span>
+                        </button>
+                        <button class="btn btn-forest" id="btn-add-manual-meal">
+                            <i data-lucide="plus" class="icon-sm"></i>
+                            <span>Add Meal</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 14-Day Consistency & Streak Activity Bar -->
+                <div class="card history-streak-card" style="margin-top: 18px; padding: 14px 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 18px;">🔥</span>
+                            <div>
+                                <b style="font-size: 13px; color: var(--ink);">Logging Streak: <span id="history-streak-count" style="color: var(--forest); font-weight: 800;">5 Days</span></b>
+                                <div class="tiny" style="color: var(--muted);">Consistent tracking leads to lasting habits</div>
+                            </div>
+                        </div>
+                        <span class="badge" style="background: rgba(155, 203, 53, 0.15); color: var(--forest); font-weight: 700; font-size: 11px;">
+                            <i data-lucide="check" class="icon-xs" style="margin-right: 4px;"></i> On Track
+                        </span>
+                    </div>
+                    <div class="history-streak-days" id="history-streak-days" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
+                        <!-- Generated via JS: 14 interactive date pills -->
+                    </div>
+                </div>
+
+                <!-- Timeframe Filters & Search -->
+                <div class="filters-bar" style="margin-top: 16px;">
+                    <button class="filter active" data-history-filter="today">Today</button>
+                    <button class="filter" data-history-filter="week">This week</button>
+                    <button class="filter" data-history-filter="month">This month</button>
+                    <button class="filter" data-history-filter="all">All dates</button>
+
+                    <div class="search-box">
+                        <i data-lucide="search" class="icon-sm"></i>
+                        <input type="text" id="history-search-input" placeholder="Search meals or ingredients...">
+                    </div>
+                </div>
+
+                <!-- Meal Type Secondary Filters -->
+                <div class="filters-bar" style="margin-top: 0; margin-bottom: 20px;">
+                    <span class="tiny" style="font-weight: 750; margin-right: 4px;">FILTER:</span>
+                    <button class="diet-tag active" data-type-filter="all">All Meals</button>
+                    <button class="diet-tag" data-type-filter="Breakfast">Breakfast</button>
+                    <button class="diet-tag" data-type-filter="Lunch">Lunch</button>
+                    <button class="diet-tag" data-type-filter="Dinner">Dinner</button>
+                    <button class="diet-tag" data-type-filter="Snack">Snacks</button>
+                </div>
+
+                <!-- History Log Group Header & Dynamic Meals Container -->
+                <div id="history-meals-container">
+                    <!-- Populated dynamically via JS: Date-grouped cards with daily macro totals -->
+                </div>
+
+                <!-- History Summary Cards -->
+                <div class="grid g3" style="margin-top: 24px;">
+                    <div class="card">
+                        <span class="kicker">TOTAL MEALS LOGGED</span>
+                        <div class="value" id="hist-stat-week-count">12 meals</div>
+                        <div class="tiny">Across your active tracking period</div>
+                    </div>
+                    <div class="card">
+                        <span class="kicker">MOST FREQUENT CHOICE</span>
+                        <div class="value" style="font-size: 20px;" id="hist-stat-fav-name">Garden nourish bowl</div>
+                        <div class="tiny">Your recurring staple meal</div>
+                    </div>
+                    <div class="card">
+                        <span class="kicker">DAILY AVERAGE INTAKE</span>
+                        <div class="value" id="hist-stat-avg-kcal">1,820 kcal</div>
+                        <div class="tiny">Average recorded daily calories</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 4: DIET REPORTS -->
+            <!-- ============================================== -->
+            <section id="view-reports" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h1 class="hello">Diet reports & trends</h1>
+                        <div class="sub">Understand long-term dietary patterns and track your consistency.</div>
+                    </div>
+                    <button class="btn btn-outline" id="btn-export-report">
+                        <i data-lucide="download" class="icon-sm"></i>
+                        <span>Export summary</span>
+                    </button>
+                </div>
+
+                <div class="filters-bar" style="margin-top: 18px;">
+                    <button class="filter active" data-report-days="7">Last 7 days</button>
+                    <button class="filter" data-report-days="14">Last 14 days</button>
+                    <button class="filter" data-report-days="30">Last 30 days</button>
+                </div>
+
+                <!-- Key Metrics Cards -->
+                <div class="grid g3">
+                    <div class="card">
+                        <span class="kicker">AVERAGE CALORIES</span>
+                        <div class="value" id="rep-avg-kcal">1,860 <span style="font-size: 13px; font-weight: 600; color: var(--muted);">kcal / day</span></div>
+                        <span class="badge"><i data-lucide="trending-up" class="icon-sm"></i> Consistent intake</span>
+                    </div>
+
+                    <div class="card">
+                        <span class="kicker">PROTEIN INTAKE</span>
+                        <div class="value" id="rep-avg-protein">78g <span style="font-size: 13px; font-weight: 600; color: var(--muted);">daily avg</span></div>
+                        <span class="badge">Balanced macros</span>
+                    </div>
+
+                    <div class="card">
+                        <span class="kicker">CONSISTENCY</span>
+                        <div class="value" id="rep-logged-days">5 <span style="font-size: 13px; font-weight: 600; color: var(--muted);">active days</span></div>
+                        <span class="badge">Keep it up!</span>
+                    </div>
+                </div>
+
+                <!-- Charts: Daily Calorie Trend + Macro Donut -->
+                <div class="grid reports-charts-grid" style="margin-top: 18px;">
+                    <div class="card">
+                        <div class="section-head" style="margin-top: 0;">
+                            <h2>Daily calorie trend</h2>
+                            <span class="tiny">Daily intake vs targets</span>
+                        </div>
+
+                        <div class="chart-container">
+                            <div class="chart" id="reports-calorie-chart" style="height: 220px;">
+                                <!-- Populated dynamically via JS -->
+                            </div>
+                        </div>
+                        <div class="legend">
+                            <i class="dot"></i>
+                            <span>Calories recorded from meal history</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="section-head" style="margin-top: 0;">
+                            <h2>Macro balance</h2>
+                            <span class="tiny">Distribution</span>
+                        </div>
+
+                        <div style="display: flex; justify-content: center; padding: 18px 0 14px;">
+                            <div id="reports-macro-donut" style="height: 160px; width: 160px; border-radius: 50%; background: conic-gradient(#8CBF35 0 32%, #EBCB73 32% 72%, #A9C7D0 72% 100%); display: grid; place-items: center; flex-shrink: 0;">
+                                <div style="height: 112px; width: 112px; border-radius: 50%; background: var(--white); display: grid; place-items: center; text-align: center;">
+                                    <b style="font-size: 22px; font-weight: 800; color: var(--ink);">100%</b>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="width: 10px; height: 10px; border-radius: 3px; background: #8CBF35;"></span>
+                                    <span>Protein</span>
+                                </span>
+                                <b id="rep-donut-protein">32%</b>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="width: 10px; height: 10px; border-radius: 3px; background: #EBCB73;"></span>
+                                    <span>Carbohydrates</span>
+                                </span>
+                                <b id="rep-donut-carbs">40%</b>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="width: 10px; height: 10px; border-radius: 3px; background: #A9C7D0;"></span>
+                                    <span>Fats</span>
+                                </span>
+                                <b id="rep-donut-fat">28%</b>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 5: GOALS & TARGETS -->
+            <!-- ============================================== -->
+            <section id="view-goals" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h1 class="hello">Your goals & preferences</h1>
+                        <div class="sub">Set daily nutrition targets or calculate them automatically from your personal biometrics.</div>
+                    </div>
+                    <button class="btn btn-outline" id="btn-calc-tdee-goals">
+                        <i data-lucide="calculator" class="icon-sm"></i>
+                        <span>Auto-Calculate from Biometrics</span>
+                    </button>
+                </div>
+
+                <div class="grid goals-config-grid" style="margin-top: 24px;">
+                    <!-- Daily Targets Card -->
+                    <div class="card">
+                        <div class="section-head" style="margin-top: 0;">
+                            <h2>Daily targets</h2>
+                            <span class="badge">Active targets</span>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 750;">
+                                    <span>Calories</span>
+                                    <span id="goal-val-calories">2,000 kcal</span>
+                                </div>
+                                <div class="progress"><span id="goal-prog-calories" style="width: 64%;"></span></div>
+                            </div>
+
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 750;">
+                                    <span>Protein</span>
+                                    <span id="goal-val-protein">100 g</span>
+                                </div>
+                                <div class="progress"><span id="goal-prog-protein" style="width: 62%;"></span></div>
+                            </div>
+
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 750;">
+                                    <span>Carbohydrates</span>
+                                    <span id="goal-val-carbs">220 g</span>
+                                </div>
+                                <div class="progress progress-carb"><span id="goal-prog-carbs" style="width: 72%;"></span></div>
+                            </div>
+
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 750;">
+                                    <span>Fat</span>
+                                    <span id="goal-val-fat">65 g</span>
+                                </div>
+                                <div class="progress progress-fat"><span id="goal-prog-fat" style="width: 55%;"></span></div>
+                            </div>
+
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 750;">
+                                    <span>Water</span>
+                                    <span id="goal-val-water">2.5 L</span>
+                                </div>
+                                <div class="progress progress-water"><span id="goal-prog-water" style="width: 80%;"></span></div>
+                            </div>
+                        </div>
+
+                        <button class="btn" id="btn-open-target-modal" style="margin-top: 24px;">
+                            <i data-lucide="edit-3" class="icon-sm"></i>
+                            <span>Edit daily targets</span>
+                        </button>
+                    </div>
+
+                    <!-- Food Preferences & Dietary Patterns -->
+                    <div class="card">
+                        <div class="section-head" style="margin-top: 0;">
+                            <h2>Food preferences</h2>
+                            <span class="tiny">Saved in browser</span>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <span class="form-label">Dietary Patterns & Habits</span>
+                            <div class="tag-cloud" id="goals-dietary-chips">
+                                <button class="diet-tag active" data-tag="Vegetarian">Vegetarian</button>
+                                <button class="diet-tag active" data-tag="High-Protein">High-Protein</button>
+                                <button class="diet-tag" data-tag="Vegan">Vegan</button>
+                                <button class="diet-tag" data-tag="Keto">Keto</button>
+                                <button class="diet-tag" data-tag="Gluten-Free">Gluten-Free</button>
+                                <button class="diet-tag" data-tag="Dairy-Free">Dairy-Free</button>
+                                <button class="diet-tag" data-tag="Mediterranean">Mediterranean</button>
+                                <button class="diet-tag" data-tag="Low-Carb">Low-Carb</button>
+                                <button class="diet-tag" data-tag="Halal">Halal</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px;">
+                            <div class="settings-row" id="row-allergens-edit" title="Click to edit allergens and avoid foods">
+                                <div class="settings-icon"><i data-lucide="shield-alert"></i></div>
+                                <div class="setting-meta">
+                                    <b>Foods to avoid & allergens</b>
+                                    <span id="goals-allergens-preview">Peanuts, Excess sodium</span>
+                                </div>
+                                <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted-light);"></i>
+                            </div>
+
+                            <div class="settings-row" id="row-schedule-edit" title="Click to edit preferred meal schedule">
+                                <div class="settings-icon"><i data-lucide="clock"></i></div>
+                                <div class="setting-meta">
+                                    <b>Meal schedule</b>
+                                    <span id="goals-schedule-preview">Breakfast: 9:00 AM · Lunch: 1:00 PM · Dinner: 7:30 PM</span>
+                                </div>
+                                <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted-light);"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 6: DIET PLANS & NUTRITION FRAMEWORKS     -->
+            <!-- ============================================== -->
+            <section id="view-plans" class="view-screen">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+                    <div>
+                        <h1 class="hello">Diet Plans & Frameworks</h1>
+                        <div class="sub">Structured nutritional protocols, targeted macro allocations, and daily meal plans.</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-forest" id="btn-create-custom-plan" onclick="window.nutriScanOpenCustomPlanModal()">
+                            <i data-lucide="plus-circle" class="icon-sm"></i>
+                            <span>Create Custom Plan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Plan Spotlight Card -->
+                <div class="card active-plan-hero-card" id="active-plan-hero" style="border: 2px solid rgba(155, 203, 53, 0.4); background: linear-gradient(135deg, rgba(36, 74, 44, 0.04), rgba(155, 203, 53, 0.08));">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <span class="badge" style="background: var(--forest); color: white; font-weight: 700; padding: 4px 10px; font-size: 11px;">
+                                <i data-lucide="check-circle" class="icon-xs" style="margin-right: 4px;"></i> ACTIVE PLAN
+                            </span>
+                            <h2 style="font-size: 22px; font-weight: 800; margin: 8px 0 4px; color: var(--forest);" id="active-plan-title">High-Protein Lean Cut</h2>
+                            <p class="tiny" style="color: var(--muted); max-width: 580px; margin: 0;" id="active-plan-desc">Accelerate fat loss while maintaining lean muscle tissue through a calibrated deficit and elevated protein distribution.</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-outline" id="btn-sync-plan-to-goals" onclick="window.syncActivePlanToGoals()" title="Apply this plan's calorie & macro targets to your daily goals">
+                                <i data-lucide="target" class="icon-sm"></i>
+                                <span>Sync to Daily Goals</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Target Macro Stats Grid -->
+                    <div class="grid g4" style="margin-top: 18px;">
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px;">DAILY TARGET</span>
+                            <div style="font-size: 20px; font-weight: 800; color: var(--forest);" id="active-plan-kcal">1,800 <small style="font-size: 12px; font-weight: 600; color: var(--muted);">kcal</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Moderate Calorie Deficit</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #059669;">PROTEIN (40%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #059669;" id="active-plan-protein">180g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Muscle Preservation</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #d97706;">CARBS (35%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #d97706;" id="active-plan-carbs">158g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Workout Glycogen</div>
+                        </div>
+                        <div style="background: var(--white); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px;">
+                            <span class="kicker" style="font-size: 10px; color: #0284c7;">FAT (25%)</span>
+                            <div style="font-size: 20px; font-weight: 800; color: #0284c7;" id="active-plan-fat">50g <small style="font-size: 12px; font-weight: 600; color: var(--muted);">/ day</small></div>
+                            <div class="tiny" style="color: var(--muted); margin-top: 2px;">Hormonal Health</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Curated Plans Catalog -->
+                <div class="section-head" style="margin-top: 28px;">
+                    <div>
+                        <h2 style="font-size: 18px; font-weight: 800; margin: 0;">Explore Nutrition Plans</h2>
+                        <span class="tiny" style="color: var(--muted);">Select a blueprint that aligns with your lifestyle and physique targets.</span>
+                    </div>
+                </div>
+
+                <div class="grid g3" id="plans-catalog-grid" style="gap: 16px;">
+                    <!-- Populated dynamically with the 6 evidence-based plans -->
+                </div>
+
+                <!-- Weekly Meal Schedule & Daily Menu -->
+                <div class="card" style="margin-top: 28px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+                        <div>
+                            <h2 style="font-size: 18px; font-weight: 800; margin: 0;">Weekly Meal Planner</h2>
+                            <span class="tiny" style="color: var(--muted);">Curated meal suggestions for your active plan. Click "Log to Today" to record any meal in 1 click!</span>
+                        </div>
+                        <!-- Day Selector -->
+                        <div class="filters-bar" id="plan-day-selector" style="margin: 0;">
+                            <button class="filter active" data-plan-day="0">Mon</button>
+                            <button class="filter" data-plan-day="1">Tue</button>
+                            <button class="filter" data-plan-day="2">Wed</button>
+                            <button class="filter" data-plan-day="3">Thu</button>
+                            <button class="filter" data-plan-day="4">Fri</button>
+                            <button class="filter" data-plan-day="5">Sat</button>
+                            <button class="filter" data-plan-day="6">Sun</button>
+                        </div>
+                    </div>
+
+                    <!-- Daily Meal Schedule Slots (Breakfast, Lunch, Snack, Dinner) -->
+                    <div class="grid g2" id="plan-daily-schedule-slots" style="gap: 14px;">
+                        <!-- Generated dynamically via JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 7: PROFILE & SETTINGS -->
+            <!-- ============================================== -->
+            <section id="view-profile" class="view-screen">
+                <h1 class="hello">Your space & biometrics</h1>
+                <div class="sub">Configure your personal body metrics, primary health goals, and system preferences.</div>
+
+                <!-- User Hero Card -->
+                <div class="card" style="margin-top: 22px; display: flex; align-items: center; gap: 20px; padding: 26px; flex-wrap: wrap;">
+                    <div class="avatar-large" id="profile-hero-avatar">A</div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 4px;" id="profile-hero-name">Alex Morgan</h2>
+                        <div class="tiny" id="profile-hero-bio">Personal nutrition space · Female · 28 yrs</div>
+                        <span class="badge" style="margin-top: 10px;" id="profile-hero-badge">
+                            <i data-lucide="target" class="icon-sm"></i>
+                            <span id="profile-hero-goal">Maintain weight & vitality</span>
+                        </span>
+                    </div>
+                    <button class="btn btn-outline" id="btn-open-profile-modal">
+                        <i data-lucide="edit-2" class="icon-sm"></i>
+                        <span>Edit profile & biometrics</span>
+                    </button>
+                </div>
+
+                <!-- Settings Columns -->
+                <div class="grid profile-overview-grid" style="margin-top: 20px;">
+                    <!-- Biometrics & Preferences Card -->
+                    <div class="card">
+                        <h2 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Personal details</h2>
+                        <div class="settings-row" id="profile-biometrics-row" title="Click to edit biometrics">
+                            <div class="settings-icon"><i data-lucide="user"></i></div>
+                            <div class="setting-meta">
+                                <b>Biometrics & Body Data</b>
+                                <span id="profile-biometrics-text">Weight: 68 kg · Height: 175 cm · Age: 28</span>
+                            </div>
+                            <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted-light);"></i>
+                        </div>
+                        <div class="settings-row" id="profile-dietary-row" title="Click to edit dietary preferences">
+                            <div class="settings-icon"><i data-lucide="leaf"></i></div>
+                            <div class="setting-meta">
+                                <b>Dietary label & Pattern</b>
+                                <span id="profile-dietary-text">Vegetarian, High-Protein</span>
+                            </div>
+                            <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted-light);"></i>
+                        </div>
+                        <div class="settings-row">
+                            <div class="settings-icon"><i data-lucide="database"></i></div>
+                            <div class="setting-meta">
+                                <b>Stored food records</b>
+                                <span id="profile-records-count">4 meals saved in browser localStorage</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Application & System Settings Card -->
+                    <div class="card">
+                        <h2 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">System & storage</h2>
+                        <div class="settings-row" id="row-backend-check">
+                            <div class="settings-icon"><i data-lucide="server"></i></div>
+                            <div class="setting-meta">
+                                <b>Python AI Services</b>
+                                <span id="profile-backend-desc">Port 8000 (ML) & Port 8001 (Vision)</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-retest-backend">Test Ping</button>
+                        </div>
+
+                        <div class="settings-row" id="row-gemini-check">
+                            <div class="settings-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;"><i data-lucide="sparkles"></i></div>
+                            <div class="setting-meta">
+                                <b>AI Cloud Vision Engine</b>
+                                <span id="profile-gemini-desc">Checking engine status...</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-open-gemini-modal" onclick="window.nutriScanOpenGeminiModal()">Manage Keys</button>
+                        </div>
+
+                        <div class="settings-row">
+                            <div class="settings-icon"><i data-lucide="download"></i></div>
+                            <div class="setting-meta">
+                                <b>Export diary data</b>
+                                <span>Download full JSON backup of meals and goals</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-export-json">Export</button>
+                        </div>
+
+                        <div class="settings-row">
+                            <div class="settings-icon"><i data-lucide="refresh-cw"></i></div>
+                            <div class="setting-meta">
+                                <b>Reset sample data</b>
+                                <span>Restore default NutriScanAI meals and settings</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-reset-data">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account & Supabase Cloud Sync Card -->
+                <div class="card" style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h2 style="font-size: 16px; font-weight: 800; margin: 0 0 4px;">Account & Cloud Sync</h2>
+                            <div class="tiny">Multi-device real-time sync powered by Supabase PostgreSQL</div>
+                        </div>
+                        <div id="profile-account-status">
+                            <span class="badge">Guest / Offline</span>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-icon"><i data-lucide="cloud"></i></div>
+                        <div class="setting-meta">
+                            <b>Cloud Account</b>
+                            <span id="profile-account-email">Not signed in (Guest Mode)</span>
+                        </div>
+                        <button class="btn btn-sm btn-forest" id="btn-profile-auth-action" onclick="window.nutriScanOpenAuthModal()">Sign In / Connect</button>
+                    </div>
+                    <div class="settings-row" id="row-import-local-data" style="display: none;">
+                        <div class="settings-icon"><i data-lucide="upload-cloud"></i></div>
+                        <div class="setting-meta">
+                            <b>Import Local Diary to Cloud</b>
+                            <span>Migrate your local meals into your Supabase account</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline" id="btn-import-local-to-cloud" onclick="window.NutriScanSync && window.NutriScanSync.importLocalDataToCloud()">Sync Now</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- FLOATING MOBILE BOTTOM NAVIGATION PILL -->
+    <!-- ============================================== -->
+    <nav class="mobile-bottom-nav">
+        <div class="mob-nav-btn active" data-view="dashboard">
+            <i data-lucide="home"></i>
+            <span>Home</span>
+        </div>
+        <div class="mob-nav-btn" data-view="history">
+            <i data-lucide="clock"></i>
+            <span>Diary</span>
+        </div>
+        <div class="mob-nav-scan" data-view="scanner" title="Scan Meal">
+            <i data-lucide="camera"></i>
+        </div>
+        <div class="mob-nav-btn" data-view="plans">
+            <i data-lucide="clipboard-list"></i>
+            <span>Plans</span>
+        </div>
+        <div class="mob-nav-btn" data-view="reports">
+            <i data-lucide="bar-chart-2"></i>
+            <span>Reports</span>
+        </div>
+        <div class="mob-nav-btn" data-view="profile">
+            <i data-lucide="user"></i>
+            <span>Profile</span>
+        </div>
+    </nav>
+
+    <!-- ============================================== -->
+    <!-- MODAL 1: EDIT PROFILE & BIOMETRICS (EXPANDED) -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-profile">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Profile & Biometrics</h3>
+                <div class="modal-close" data-close-modal="modal-profile"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="edit-prof-name">Full Name</label>
+                    <input type="text" id="edit-prof-name" class="form-input" value="Alex Morgan">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label class="form-label" for="edit-prof-age">Age (years)</label>
+                        <input type="number" id="edit-prof-age" class="form-input" min="10" max="110" value="28">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="edit-prof-gender">Biological Gender</label>
+                        <select id="edit-prof-gender" class="form-select">
+                            <option value="Female">Female</option>
+                            <option value="Male">Male</option>
+                            <option value="Other">Non-binary / Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label class="form-label" for="edit-prof-weight">Weight (kg)</label>
+                        <input type="number" id="edit-prof-weight" class="form-input" min="30" max="250" step="0.5" value="68">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="edit-prof-height">Height (cm)</label>
+                        <input type="number" id="edit-prof-height" class="form-input" min="100" max="230" value="175">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="edit-prof-activity">Activity Level</label>
+                    <select id="edit-prof-activity" class="form-select">
+                        <option value="sedentary">Sedentary (desk job, little exercise)</option>
+                        <option value="light" selected>Lightly Active (exercise 1-3 days/week)</option>
+                        <option value="moderate">Moderately Active (exercise 3-5 days/week)</option>
+                        <option value="very">Very Active (hard exercise 6-7 days/week)</option>
+                        <option value="extra">Extremely Active (physical job / athletic training)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="edit-prof-goal">Primary Health Goal</label>
+                    <select id="edit-prof-goal" class="form-select">
+                        <option value="Maintain weight & vitality">Maintain weight & vitality</option>
+                        <option value="Gentle fat loss">Gentle fat loss (-400 kcal)</option>
+                        <option value="Muscle gain & strength">Muscle gain & strength (+350 kcal)</option>
+                        <option value="Cardiovascular wellness">Cardiovascular wellness</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close-modal="modal-profile">Cancel</button>
+                <button class="btn" id="btn-save-profile">Save Profile & Recalculate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 2: EDIT TARGETS / GOALS -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-targets">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Daily Targets</h3>
+                <div class="modal-close" data-close-modal="modal-targets"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span class="tiny">Want science-backed targets based on your biometrics?</span>
+                    <button class="btn btn-sm btn-outline" id="btn-wizard-recalc">Auto-Calculate</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-goal-calories">Target Calories (kcal)</label>
+                    <input type="number" id="edit-goal-calories" class="form-input" min="800" max="6000" step="50" value="2000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-goal-protein">Target Protein (grams)</label>
+                    <input type="number" id="edit-goal-protein" class="form-input" min="20" max="300" step="5" value="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-goal-carbs">Target Carbohydrates (grams)</label>
+                    <input type="number" id="edit-goal-carbs" class="form-input" min="20" max="600" step="5" value="220">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-goal-fat">Target Fat (grams)</label>
+                    <input type="number" id="edit-goal-fat" class="form-input" min="10" max="200" step="5" value="65">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-goal-water">Target Water (Liters)</label>
+                    <input type="number" id="edit-goal-water" class="form-input" min="0.5" max="8" step="0.1" value="2.5">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close-modal="modal-targets">Cancel</button>
+                <button class="btn" id="btn-save-targets">Save Targets</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 3: ADD MANUAL MEAL -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-add-meal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Log a Meal Manually</h3>
+                <div class="modal-close" data-close-modal="modal-add-meal"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body">
+                <!-- 1-Click Quick Food Presets -->
+                <div style="margin-bottom: 14px;">
+                    <label class="form-label" style="font-size: 11px; margin-bottom: 6px; color: var(--forest); font-weight: 700;">
+                        <i data-lucide="zap" class="icon-xs"></i> Quick Presets (1-Click Fill)
+                    </label>
+                    <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none;">
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Boiled Eggs (2 pcs)" data-type="Breakfast" data-cal="156" data-p="12" data-c="1" data-f="10">🥚 2 Eggs</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Steamed White Rice (1 cup)" data-type="Lunch" data-cal="205" data-p="4" data-c="45" data-f="0">🍚 Rice</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Oatmeal with Honey" data-type="Breakfast" data-cal="180" data-p="6" data-c="32" data-f="3">🥣 Oatmeal</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Whey Protein Shake" data-type="Snack" data-cal="130" data-p="25" data-c="3" data-f="2">🥤 Whey</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Banana (Medium)" data-type="Snack" data-cal="105" data-p="1" data-c="27" data-f="0">🍌 Banana</button>
+                        <button type="button" class="btn btn-sm btn-outline meal-preset-chip" data-name="Whole Wheat Roti (2 pcs)" data-type="Dinner" data-cal="220" data-p="7" data-c="44" data-f="1">🫓 2 Roti</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="manual-meal-name">Meal Name</label>
+                    <input type="text" id="manual-meal-name" class="form-input" placeholder="e.g. Avocado Toast with Egg">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label class="form-label" for="manual-meal-type">Meal Type</label>
+                        <select id="manual-meal-type" class="form-select">
+                            <option value="Breakfast">Breakfast</option>
+                            <option value="Lunch">Lunch</option>
+                            <option value="Dinner">Dinner</option>
+                            <option value="Snack">Snack</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="manual-meal-calories">Calories (kcal)</label>
+                        <input type="number" id="manual-meal-calories" class="form-input" placeholder="450" min="0">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" for="manual-meal-protein">Protein (g)</label>
+                        <input type="number" id="manual-meal-protein" class="form-input" placeholder="20" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="manual-meal-carbs">Carbs (g)</label>
+                        <input type="number" id="manual-meal-carbs" class="form-input" placeholder="45" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="manual-meal-fat">Fat (g)</label>
+                        <input type="number" id="manual-meal-fat" class="form-input" placeholder="15" min="0">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close-modal="modal-add-meal">Cancel</button>
+                <button class="btn" id="btn-save-manual-meal">Add to Diary</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 4: INTERACTIVE MEAL DETAILS MODAL -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-meal-details">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="detail-meal-title">Meal Details</h3>
+                <div class="modal-close" data-close-modal="modal-meal-details"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding-top: 14px;">
+                <img id="detail-meal-img" src="assets/nourish-bowl.png" style="width: 100%; height: 190px; object-fit: cover; border-radius: 14px;" alt="Meal photo">
+                <div id="detail-view-header" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <div>
+                        <h2 id="detail-meal-name" style="font-size: 19px; font-weight: 800; margin: 0 0 2px;">Meal Name</h2>
+                        <span class="tiny" id="detail-meal-time">Breakfast · 9:30 AM · Today</span>
+                    </div>
+                    <div class="meal-kcal" style="font-size: 24px;" id="detail-meal-kcal">420<small>kcal</small></div>
+                </div>
+
+                <!-- Editable form (hidden by default) -->
+                <div id="detail-edit-form" style="display: none; margin-top: 12px; background: var(--pale); padding: 14px; border-radius: 12px; border: 1px solid var(--line);">
+                    <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px; color: var(--forest); display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="edit-3" class="icon-sm"></i> Edit Meal Details
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" for="edit-meal-name" style="font-size: 11px;">Meal Name</label>
+                        <input type="text" id="edit-meal-name" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-type" style="font-size: 11px;">Meal Type</label>
+                            <select id="edit-meal-type" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                                <option value="Breakfast">Breakfast</option>
+                                <option value="Lunch">Lunch</option>
+                                <option value="Dinner">Dinner</option>
+                                <option value="Snack">Snack</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-calories" style="font-size: 11px;">Calories (kcal)</label>
+                            <input type="number" id="edit-meal-calories" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-protein" style="font-size: 11px;">Protein (g)</label>
+                            <input type="number" id="edit-meal-protein" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-carbs" style="font-size: 11px;">Carbs (g)</label>
+                            <input type="number" id="edit-meal-carbs" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" for="edit-meal-fat" style="font-size: 11px;">Fat (g)</label>
+                            <input type="number" id="edit-meal-fat" class="form-input" style="font-size: 13px; padding: 6px 10px;">
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                        <button type="button" class="btn btn-sm btn-outline" id="btn-cancel-edit-meal">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-forest" id="btn-save-edit-meal">Save Changes</button>
+                    </div>
+                </div>
+
+                <div class="nutrient-grid" id="detail-nutrient-view" style="margin-top: 8px;">
+                    <div class="nutrient">
+                        <span>Protein</span>
+                        <b id="detail-meal-p">24g</b>
+                        <small id="detail-meal-p-pct">24%</small>
+                    </div>
+                    <div class="nutrient">
+                        <span>Carbs</span>
+                        <b id="detail-meal-c">48g</b>
+                        <small id="detail-meal-c-pct">22%</small>
+                    </div>
+                    <div class="nutrient">
+                        <span>Fat</span>
+                        <b id="detail-meal-f">22g</b>
+                        <small id="detail-meal-f-pct">34%</small>
+                    </div>
+                    <div class="nutrient">
+                        <span>Fiber</span>
+                        <b id="detail-meal-fib">8g</b>
+                        <small>digestive</small>
+                    </div>
+                </div>
+
+                <div id="detail-components-wrap" style="margin-top: 8px;">
+                    <b style="font-size: 12px; color: var(--ink-light);">Portions & Components</b>
+                    <div class="table-responsive">
+                        <table class="ingredient-table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Mass</th>
+                                    <th>Calories</th>
+                                    <th>P / C / F</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-components-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-outline" id="btn-detail-delete" style="color: #E24F43; border-color: #F6C8C4;" title="Delete this meal">
+                        <i data-lucide="trash-2" class="icon-sm"></i> Delete
+                    </button>
+                    <button class="btn btn-outline" id="btn-detail-clone" title="Log this meal again today">
+                        <i data-lucide="copy" class="icon-sm"></i> Log Again
+                    </button>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-outline" id="btn-detail-edit" title="Edit meal details">
+                        <i data-lucide="edit-3" class="icon-sm"></i> Edit
+                    </button>
+                    <button class="btn" data-close-modal="modal-meal-details">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 5: LIVE CAMERA CAPTURE VIEWFINDER -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-camera">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3>Live Plate Camera</h3>
+                <div class="modal-close" id="btn-close-camera"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <div class="camera-viewfinder-box">
+                    <video id="camera-feed" playsinline autoplay muted></video>
+                    <canvas id="camera-canvas" style="display: none;"></canvas>
+                    <div class="camera-reticle" id="camera-reticle"></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <span class="tiny" id="camera-mode-hint">Center your plate inside the reticle</span>
+                    <button class="btn btn-sm btn-outline" id="btn-camera-flip">
+                        <i data-lucide="switch-camera" class="icon-sm"></i> Flip Camera
+                    </button>
+                </div>
+
+                <div class="camera-controls-bar">
+                    <button class="shutter-btn" id="btn-shutter-capture" title="Take Photo">
+                        <i data-lucide="camera" class="icon-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 6: EDIT ALLERGENS & EXCLUSIONS -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-allergens">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Foods to Avoid & Allergens</h3>
+                <div class="modal-close" data-close-modal="modal-allergens"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="edit-allergens-input">Allergens & Excluded Ingredients</label>
+                    <textarea id="edit-allergens-input" class="form-input" rows="3" placeholder="e.g. Peanuts, Shellfish, Excess sodium, Lactose"></textarea>
+                    <span class="tiny">NutriScanAI flags detected ingredients that match your exclusions.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close-modal="modal-allergens">Cancel</button>
+                <button class="btn" id="btn-save-allergens">Save Exclusions</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 7: EDIT MEAL SCHEDULE -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-schedule">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Preferred Meal Schedule</h3>
+                <div class="modal-close" data-close-modal="modal-schedule"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="sched-breakfast">Breakfast Target Time</label>
+                    <input type="text" id="sched-breakfast" class="form-input" value="9:00 AM">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="sched-lunch">Lunch Target Time</label>
+                    <input type="text" id="sched-lunch" class="form-input" value="1:00 PM">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="sched-dinner">Dinner Target Time</label>
+                    <input type="text" id="sched-dinner" class="form-input" value="7:30 PM">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" data-close-modal="modal-schedule">Cancel</button>
+                <button class="btn" id="btn-save-schedule">Save Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 8: AUTHENTICATION & SUPABASE CLOUD SYNC -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-auth">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px;"><i data-lucide="flower-2"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800;">NutriScan<span style="color: var(--forest);">AI</span></h3>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <button type="button" class="iconbtn" onclick="window.nutriScanOpenConfigModal()" title="Supabase Database Settings" style="width: 28px; height: 28px;">
+                        <i data-lucide="settings-2" style="width: 15px; height: 15px;"></i>
+                    </button>
+                    <div class="modal-close" data-close-modal="modal-auth" id="modal-auth-close-btn" title="Close"><i data-lucide="x"></i></div>
+                </div>
+            </div>
+
+            <div class="auth-tabs-bar">
+                <button type="button" class="auth-tab active" id="tab-auth-signup" onclick="window.switchAuthTab('signup')">Sign Up</button>
+                <button type="button" class="auth-tab" id="tab-auth-signin" onclick="window.switchAuthTab('signin')">Log In</button>
+            </div>
+
+            <div class="modal-body" style="padding-top: 10px;">
+                <!-- Tab Pane 1: Sign Up -->
+                <div id="auth-pane-signup" class="auth-pane">
+                    <form id="form-auth-signup" onsubmit="event.preventDefault(); window.handleAuthSignUp();">
+                        <div class="form-group">
+                            <label class="form-label" for="auth-signup-name">Full Name</label>
+                            <input type="text" id="auth-signup-name" class="form-input" placeholder="e.g. Sarah Connor" required autocomplete="name">
+                        </div>
+
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="form-label" for="auth-signup-dob" style="margin-bottom: 0;">Date of Birth</label>
+                                <span id="auth-signup-age-badge" class="age-calc-pill">Select DOB</span>
+                            </div>
+                            <input type="date" id="auth-signup-dob" class="form-input" required onchange="window.handleDOBChange('auth-signup-dob', 'auth-signup-age-badge')" oninput="window.handleDOBChange('auth-signup-dob', 'auth-signup-age-badge')">
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div class="form-group">
+                                <label class="form-label" for="auth-signup-height">Height (cm)</label>
+                                <input type="number" id="auth-signup-height" class="form-input" placeholder="175" min="50" max="260" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="auth-signup-weight">Weight (kg)</label>
+                                <input type="number" id="auth-signup-weight" class="form-input" placeholder="70" min="20" max="300" step="0.5" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="auth-signup-email">Email Address</label>
+                            <input type="email" id="auth-signup-email" class="form-input" placeholder="you@domain.com" required autocomplete="email">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="auth-signup-password">Password</label>
+                            <div class="password-field-wrap">
+                                <input type="password" id="auth-signup-password" class="form-input" placeholder="Min. 6 characters" minlength="6" required autocomplete="new-password">
+                                <button type="button" class="btn-toggle-eye" onclick="window.togglePasswordEye('auth-signup-password', this)" title="Show/Hide Password" aria-label="Toggle password visibility">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                            </div>
+                            <div class="password-strength-track" style="margin-top: 6px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden;">
+                                <div id="password-strength-fill" style="width: 0%; height: 100%; transition: width 0.3s, background 0.3s;"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="auth-signup-confirm-password">Confirm Password</label>
+                            <div class="password-field-wrap">
+                                <input type="password" id="auth-signup-confirm-password" class="form-input" placeholder="Re-enter password" minlength="6" required autocomplete="new-password" oninput="window.handleCheckPasswordMatch()">
+                                <button type="button" class="btn-toggle-eye" onclick="window.togglePasswordEye('auth-signup-confirm-password', this)" title="Show/Hide Password" aria-label="Toggle password visibility">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                            </div>
+                            <div id="signup-pass-match-msg" class="tiny" style="margin-top: 4px; display: none;"></div>
+                        </div>
+
+                        <button type="submit" class="btn btn-forest" id="btn-submit-signup" style="width: 100%; margin-top: 14px; padding: 12px; font-weight: 700;">
+                            <span>Create Free Account</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tab Pane 2: Log In -->
+                <div id="auth-pane-signin" class="auth-pane" style="display: none;">
+                    <form id="form-auth-signin" onsubmit="event.preventDefault(); window.handleAuthSignIn();">
+                        <div class="form-group">
+                            <label class="form-label" for="auth-signin-email">Email Address</label>
+                            <input type="email" id="auth-signin-email" class="form-input" placeholder="you@domain.com" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="form-label" for="auth-signin-password" style="margin-bottom: 0;">Password</label>
+                                <a href="#" class="tiny" style="color: var(--forest); font-weight: 700; text-decoration: none;" onclick="event.preventDefault(); window.handleForgotPassword();">Forgot?</a>
+                            </div>
+                            <div class="password-field-wrap">
+                                <input type="password" id="auth-signin-password" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+                                <button type="button" class="btn-toggle-eye" onclick="window.togglePasswordEye('auth-signin-password', this)" title="Show/Hide Password" aria-label="Toggle password visibility">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-forest" id="btn-submit-signin" style="width: 100%; margin-top: 16px; padding: 12px; font-weight: 700;">
+                            <span>Log In</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Divider & Local Mode Action -->
+                <div class="auth-divider" style="display: flex; align-items: center; margin: 18px 0 12px; gap: 10px;">
+                    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+                    <span class="tiny" style="color: var(--muted); font-weight: 700; letter-spacing: 0.05em;">OR</span>
+                    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+                </div>
+
+                <button type="button" class="btn btn-outline" id="btn-open-local-signup" style="width: 100%; padding: 11px; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="window.openLocalSignupModal();">
+                    <i data-lucide="hard-drive" class="icon-sm" style="color: var(--forest);"></i>
+                    <span style="font-weight: 700;">Use without an account</span>
+                </button>
+                <div class="tiny text-center" style="margin-top: 6px; color: var(--muted); font-size: 11px;">
+                    Store nutrition logs privately in your browser with zero cloud storage.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 9: LOCAL MODE SIGNUP (PRIVATE OFFLINE)   -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-local-signup">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px;"><i data-lucide="flower-2"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800; line-height: 1.2;">Local Signup</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-local-signup" id="modal-local-signup-close-btn" title="Close"><i data-lucide="x"></i></div>
+            </div>
+
+            <div class="modal-body" style="padding-top: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <button type="button" class="btn-link tiny" style="display: inline-flex; align-items: center; gap: 4px; color: var(--forest); background: none; border: none; padding: 0; font-weight: 700; cursor: pointer;" onclick="window.backToAuthModal()">
+                        <i data-lucide="arrow-left" style="width: 13px; height: 13px;"></i> Back to Log In / Sign Up
+                    </button>
+                    <span class="badge" style="font-size: 10px; background: var(--pale); color: var(--muted); font-weight: 700;">💾 100% Offline</span>
+                </div>
+
+                <p class="tiny" style="color: var(--muted); margin-bottom: 16px; line-height: 1.4;">
+                    No cloud account or email required. Your biometrics and meals stay securely stored in this browser.
+                </p>
+
+                <form id="form-local-signup" onsubmit="event.preventDefault(); window.handleLocalSignupSubmit();">
+                    <div class="form-group">
+                        <label class="form-label" for="local-signup-name">Full Name</label>
+                        <input type="text" id="local-signup-name" class="form-input" placeholder="e.g. Sarah Connor" required autocomplete="name">
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label class="form-label" for="local-signup-dob" style="margin-bottom: 0;">Date of Birth</label>
+                            <span id="local-signup-age-badge" class="age-calc-pill">Select DOB</span>
+                        </div>
+                        <input type="date" id="local-signup-dob" class="form-input" required onchange="window.handleDOBChange('local-signup-dob', 'local-signup-age-badge')" oninput="window.handleDOBChange('local-signup-dob', 'local-signup-age-badge')">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group">
+                            <label class="form-label" for="local-signup-height">Height (cm)</label>
+                            <input type="number" id="local-signup-height" class="form-input" placeholder="175" min="50" max="260" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="local-signup-weight">Weight (kg)</label>
+                            <input type="number" id="local-signup-weight" class="form-input" placeholder="70" min="20" max="300" step="0.5" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="local-signup-gender">Biological Sex</label>
+                        <select id="local-signup-gender" class="form-select">
+                            <option value="Female" selected>Female</option>
+                            <option value="Male">Male</option>
+                            <option value="Other">Other / Non-binary</option>
+                        </select>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group">
+                            <label class="form-label" for="local-signup-activity">Activity Level</label>
+                            <select id="local-signup-activity" class="form-select">
+                                <option value="sedentary">Sedentary</option>
+                                <option value="light" selected>Light (1-3 d/wk)</option>
+                                <option value="moderate">Moderate (3-5 d/wk)</option>
+                                <option value="very">Very Active</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="local-signup-goal">Health Goal</label>
+                            <select id="local-signup-goal" class="form-select">
+                                <option value="Maintain weight & vitality" selected>Maintain weight</option>
+                                <option value="Sustainable fat loss">Fat loss (-400 kcal)</option>
+                                <option value="Lean muscle gain">Muscle gain (+350 kcal)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-forest" id="btn-submit-local-signup" style="width: 100%; margin-top: 14px; padding: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <i data-lucide="check-circle" class="icon-sm"></i>
+                        <span>Start Using NutriScanAI (Local Mode)</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 10: SUPABASE CONFIGURATION               -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-supabase-config">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px;"><i data-lucide="database"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800;">Supabase Settings</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-supabase-config" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding-top: 14px;">
+                <p class="tiny" style="margin-bottom: 14px; line-height: 1.5; color: var(--muted);">
+                    Configure your connected Supabase PostgreSQL cloud instance. Pre-configured with the default test project.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="cfg-supabase-url">Supabase Project URL</label>
+                    <input type="url" id="cfg-supabase-url" class="form-input" placeholder="https://xyz.supabase.co" value="https://jndsncexhhabcibtzxts.supabase.co">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cfg-supabase-key">Anon / Publishable API Key</label>
+                    <input type="text" id="cfg-supabase-key" class="form-input" placeholder="sb_publishable_... or eyJ..." value="sb_publishable_vwDsYMPd45aFbFOM0SbGkA_XN9nWyiV">
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 16px;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="window.handleResetSupabaseConfig()">Reset Default</button>
+                    <button type="button" class="btn btn-sm btn-forest" onclick="window.handleSaveSupabaseConfig()" style="flex: 1;">Save & Reconnect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 11: AI CLOUD ENGINE & KEY VAULT CONFIG   -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-gemini-config">
+        <div class="modal" style="max-width: 520px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: linear-gradient(135deg, #10b981, #06b6d4); color: white;"><i data-lucide="sparkles"></i></span>
+                    <div>
+                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">AI Cloud Engine & Key Vault</h3>
+                        <div class="tiny" style="color: var(--muted);">Round-robin key pool with dynamic 429 failover</div>
+                    </div>
+                </div>
+                <div class="modal-close" data-close-modal="modal-gemini-config" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding-top: 14px;">
+                <p class="tiny" style="margin-bottom: 14px; line-height: 1.5; color: var(--muted);">
+                    Configure high-throughput AI API keys. Keys are encrypted with an AES-256 authenticated cipher and stored with automated round-robin rotation and rate-limit failover.
+                </p>
+
+                <!-- Supabase Cloud Vault Badge -->
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 10px 14px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="shield-check" style="width: 18px; height: 18px; color: #10b981;"></i>
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--ink);">Encrypted Security Vault</div>
+                            <div class="tiny" style="color: var(--muted);" id="gemini-vault-status-text">AES-256 authenticated cipher · Zero plaintext in DB</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-sync-supabase" onclick="window.handleSyncSupabaseKeys()" title="Sync encrypted keys from Vault" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                        <i data-lucide="cloud-download" class="icon-sm"></i> Sync Cloud
+                    </button>
+                </div>
+
+                <!-- Active Keys List -->
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="form-label" style="margin: 0; font-weight: 700;">Configured Keys in Pool</label>
+                        <span id="gemini-pool-counter" class="badge" style="font-size: 11px;">0 Keys</span>
+                    </div>
+                    <div id="gemini-keys-list" style="background: var(--surface-light, rgba(0,0,0,0.03)); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                        <div class="tiny" style="color: var(--muted); text-align: center; padding: 12px 0;">Loading keys...</div>
+                    </div>
+                </div>
+
+                <!-- Add Keys Input -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="cfg-gemini-new-key">Add API Key(s)</label>
+                    <textarea id="cfg-gemini-new-key" class="form-input" rows="2" placeholder="Paste one or more API keys (comma or newline separated)..." style="font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <div class="tiny" style="color: var(--muted); margin-top: 4px;">High-throughput cloud vision keys. Keys are stored encrypted with zero plaintext exposure.</div>
+                </div>
+
+                <!-- Model Selection -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="form-label" for="cfg-gemini-model">Vision Engine Mode</label>
+                    <select id="cfg-gemini-model" class="form-input" style="font-size: 13px;" onchange="window.handleChangeGeminiModel()">
+                        <option value="gemini-3-flash-preview" selected>Ultra-Fast Vision (High Throughput & Accuracy)</option>
+                        <option value="gemini-2.5-flash">Standard Precision Vision</option>
+                        <option value="gemini-2.5-pro">Deep Nutritional Analysis Mode</option>
+                    </select>
+                </div>
+
+                <!-- Test / Save Actions -->
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-test" onclick="window.handleTestGeminiKeys()" style="display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="zap" class="icon-sm"></i> Test Key Pool
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-gemini-refresh" onclick="window.loadGeminiKeysStatus()" title="Refresh status">
+                        <i data-lucide="refresh-cw" class="icon-sm"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-forest" id="btn-gemini-save" onclick="window.handleSaveGeminiKeys()" style="flex: 1; min-width: 120px;">
+                        Add Keys to Pool
+                    </button>
+                </div>
+
+                <div id="gemini-test-feedback" class="tiny" style="margin-top: 10px; min-height: 18px; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 12: 3D DEPTH & ELEVATION MAP PREVIEW    -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-depth-map">
+        <div class="modal" style="max-width: 580px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: linear-gradient(135deg, #0284c7, #8b5cf6); color: white;"><i data-lucide="layers"></i></span>
+                    <div>
+                        <h3 style="font-size: 17px; font-weight: 800; margin: 0;">3D Depth & Elevation Map</h3>
+                        <span class="tiny" style="color: var(--muted);" id="depth-modal-subtitle">Calibrated plate metrology & height field</span>
+                    </div>
+                </div>
+                <div class="modal-close" data-close-modal="modal-depth-map" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px; text-align: center;">
+                <div style="border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #0b0f19; margin-bottom: 12px;">
+                    <img id="depth-modal-img" src="" alt="3D Depth Map" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
+                </div>
+                <div id="depth-modal-details" style="font-size: 12px; line-height: 1.6; text-align: left; color: var(--muted); background: var(--pale); padding: 12px; border-radius: 8px;">
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-sm btn-outline" data-close-modal="modal-depth-map">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 13: COMMAND PALETTE (Ctrl+K)            -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-command-palette">
+        <div class="cmd-palette-box">
+            <div class="cmd-palette-search-wrap">
+                <i data-lucide="search" class="cmd-palette-search-icon"></i>
+                <input type="text" id="cmd-palette-input" class="cmd-palette-input" placeholder="Type a command, search meals, or jump to view..." autocomplete="off">
+                <span class="cmd-palette-esc-badge" data-close-modal="modal-command-palette">ESC</span>
+            </div>
+            <div class="cmd-palette-results" id="cmd-palette-results">
+                <!-- Dynamically populated commands & recent meals -->
+            </div>
+            <div class="cmd-palette-footer">
+                <span><kbd class="key-hint">↑</kbd> <kbd class="key-hint">↓</kbd> to navigate</span>
+                <span><kbd class="key-hint">↵</kbd> to select</span>
+                <span><kbd class="key-hint">esc</kbd> to close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 14: EXPORT DIET DATA CHOICES            -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-export-report">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: var(--sage); color: var(--forest);"><i data-lucide="download"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Export Diet Data</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-export-report"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <p class="tiny" style="color: var(--muted); margin-bottom: 14px;">Choose your preferred export format for meals, calories, macro breakdowns, and goals:</p>
+                <div class="export-options-grid">
+                    <div class="export-card" id="btn-export-csv-action">
+                        <div class="export-card-icon" style="background: rgba(87, 142, 37, 0.12); color: var(--forest);"><i data-lucide="table"></i></div>
+                        <div class="export-card-info">
+                            <b>CSV Spreadsheet (.csv)</b>
+                            <span class="tiny">Tabular meal logs for Microsoft Excel, Google Sheets, or Apple Numbers</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                    <div class="export-card" id="btn-export-json-action">
+                        <div class="export-card-icon" style="background: rgba(74, 144, 226, 0.12); color: var(--water-color);"><i data-lucide="file-code"></i></div>
+                        <div class="export-card-info">
+                            <b>Full JSON Backup (.json)</b>
+                            <span class="tiny">Raw complete data backup including portion weights, goals, and profile</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                    <div class="export-card" id="btn-export-print-action">
+                        <div class="export-card-icon" style="background: rgba(235, 203, 115, 0.2); color: #B38600;"><i data-lucide="printer"></i></div>
+                        <div class="export-card-info">
+                            <b>Print / PDF Nutrition Summary</b>
+                            <span class="tiny">Clean, presentation-ready printout for your doctor, dietitian, or coach</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="icon-sm" style="color: var(--muted);"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-outline" data-close-modal="modal-export-report">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL 15: CREATE CUSTOM DIET PLAN             -->
+    <!-- ============================================== -->
+    <div class="modal-overlay" id="modal-custom-plan">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="brandmark" style="width: 28px; height: 28px; font-size: 14px; background: var(--sage); color: var(--forest);"><i data-lucide="clipboard-list"></i></span>
+                    <h3 style="font-size: 17px; font-weight: 800; margin: 0;">Create Custom Diet Plan</h3>
+                </div>
+                <div class="modal-close" data-close-modal="modal-custom-plan" title="Close"><i data-lucide="x"></i></div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <form id="form-custom-plan" onsubmit="event.preventDefault(); window.handleSaveCustomPlan();">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="custom-plan-name">Plan Name</label>
+                        <input type="text" id="custom-plan-name" class="form-input" placeholder="e.g. Marathon Prep or Keto Cutting" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="custom-plan-desc">Short Description / Goal</label>
+                        <input type="text" id="custom-plan-desc" class="form-input" placeholder="e.g. High carb endurance fueling with clean proteins">
+                    </div>
+                    <div class="grid g2" style="gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-kcal">Daily Calories (kcal)</label>
+                            <input type="number" id="custom-plan-kcal" class="form-input" value="2000" min="1000" max="6000" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-protein">Daily Protein (g)</label>
+                            <input type="number" id="custom-plan-protein" class="form-input" value="130" min="20" max="400" required>
+                        </div>
+                    </div>
+                    <div class="grid g2" style="gap: 12px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-carbs">Daily Carbs (g)</label>
+                            <input type="number" id="custom-plan-carbs" class="form-input" value="220" min="0" max="800" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="custom-plan-fat">Daily Fat (g)</label>
+                            <input type="number" id="custom-plan-fat" class="form-input" value="65" min="10" max="300" required>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" data-close-modal="modal-custom-plan">Cancel</button>
+                        <button type="submit" class="btn btn-forest">Save & Activate Plan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- NUTRIBOT AI AGENTIC DRAWER & FLOATING LAUNCHER -->
+    <!-- ============================================== -->
+    <div class="nutribot-backdrop" id="nutribot-backdrop"></div>
+    <aside class="nutribot-drawer" id="nutribot-drawer" aria-label="NutriBot AI Assistant">
+        <div class="nutribot-header">
+            <div class="nutribot-title-wrap">
+                <div class="nutribot-avatar-icon">
+                    <i data-lucide="bot"></i>
+                </div>
+                <div>
+                    <div class="nutribot-title-row">
+                        <h3 class="nutribot-title">NutriBot AI</h3>
+                        <span class="nutribot-model-badge" id="nutribot-model-badge">
+                            <span class="nutribot-status-dot" id="nutribot-status-dot"></span>
+                            <span id="nutribot-model-name">AI Assistant</span>
+                        </span>
+                    </div>
+                    <div class="nutribot-subtitle">Autonomous Nutrition & Diary Assistant</div>
+                </div>
+            </div>
+            <div class="nutribot-header-actions">
+                <button type="button" class="iconbtn-sm" id="btn-nutribot-clear" title="Clear Chat History">
+                    <i data-lucide="trash-2"></i>
+                </button>
+                <button type="button" class="iconbtn-sm" id="btn-nutribot-close" title="Close NutriBot">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Realtime Live Context Bar -->
+        <div class="nutribot-context-bar" id="nutribot-context-bar">
+            <div class="nutribot-context-item" id="nb-ctx-kcal" title="Remaining Daily Calorie Budget">
+                <i data-lucide="flame" class="icon-xs"></i>
+                <span id="nb-ctx-kcal-val">-- kcal left</span>
+            </div>
+            <div class="nutribot-context-item" id="nb-ctx-protein" title="Remaining Protein Target">
+                <i data-lucide="activity" class="icon-xs"></i>
+                <span id="nb-ctx-protein-val">--g protein</span>
+            </div>
+            <div class="nutribot-context-item" id="nb-ctx-water" title="Water Logged Today">
+                <i data-lucide="droplet" class="icon-xs"></i>
+                <span id="nb-ctx-water-val">--L water</span>
+            </div>
+        </div>
+
+        <!-- Chat Conversation Stream -->
+        <div class="nutribot-messages" id="nutribot-messages">
+            <!-- Dynamic message bubbles & action cards inserted here -->
+        </div>
+
+        <!-- Quick Prompt Chips -->
+        <div class="nutribot-chips-bar" id="nutribot-chips-bar">
+            <button type="button" class="nutribot-chip" data-prompt="What should I eat for dinner with my remaining calories?">🍽️ Dinner suggestion</button>
+            <button type="button" class="nutribot-chip" data-prompt="Log 250ml water for me">💧 Log 250ml water</button>
+            <button type="button" class="nutribot-chip" data-prompt="How are my macros looking today?">📊 Check macros</button>
+            <button type="button" class="nutribot-chip" data-prompt="Update my daily calorie goal to 2100 kcal">🎯 Set 2,100 kcal</button>
+        </div>
+
+        <!-- Input Form -->
+        <form class="nutribot-input-form" id="nutribot-input-form">
+            <textarea id="nutribot-input" class="nutribot-textarea" rows="1" placeholder="Ask NutriBot or command (e.g. 'Log 300ml water')..."></textarea>
+            <button type="submit" class="nutribot-send-btn" id="btn-nutribot-send" title="Send (Enter)">
+                <i data-lucide="send"></i>
+            </button>
+        </form>
+    </aside>
+
+    <!-- Floating Toggle Button -->
+    <button class="nutribot-float-btn" id="btn-nutribot-toggle" title="Chat with NutriBot AI">
+        <div class="nutribot-float-icon">
+            <i data-lucide="sparkles"></i>
+        </div>
+        <span class="nutribot-float-label">NutriBot</span>
+        <span class="nutribot-float-indicator" id="nutribot-float-indicator"></span>
+    </button>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- MAIN APP SCRIPT -->
+    <script src="config.js?v=1.0"></script>
+    <script src="script.js?v=5.0"></script>
+</body>
+
+</html>

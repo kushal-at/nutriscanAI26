@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: nutriscan-dl
+    runtime: python
+    plan: free
+    rootDir: APP-ONNX/Intelligence/DL
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ORT_INTRA_THREADS
+        value: "1"
+      - key: GEMINI_API_KEYS
+        sync: false
+
+  - type: web
+    name: nutriscan-ml
+    runtime: python
+    plan: free
+    rootDir: APP-ONNX/Intelligence/ML
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"

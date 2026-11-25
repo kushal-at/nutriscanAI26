@@ -1,159 +1,34 @@
-# 🥗 NutraVision — Dual-View AI Nutrition Analyzer & Food Weight Estimator
+# 🥗 NutraVision / NutriScanAI
 
-NutraVision is an offline-capable, dual-microservice AI platform that estimates food portion weights and complete nutritional profiles from paired top-down and side-view meal photographs.
+This repository is organized into application and reference directories:
 
-The project combines **PyTorch DeepLabV3+ semantic segmentation**, local **Qwen3-VL (2B)** multimodal reasoning, **calibrated plate geometry**, and **CatBoost multi-target regression** enriched with authentic Indian food datasets from **CVIT IIIT Hyderabad (ICVGIP 2025)** and **ICMR-NIN**.
+## 📁 Repository Structure
 
----
+### 🚀 [`APP/`](./APP) — Production Application
+Contains the complete, self-contained NutraVision platform:
+* **[`APP/FrontEnd/`](./APP/FrontEnd/)**: Responsive web application UI (dual-camera food scanner, nutrition dashboard, meal history, Supabase sync).
+* **[`APP/ML/`](./APP/ML/)**: Nutrition regression microservice (Port 8000) powered by 5 trained CatBoost models (`energy_kcal`, `carb_g`, `protein_g`, `fat_g`, `fibre_g`), 3-tier preparation resolution, and Atwater factor reconciliation.
+* **[`APP/vision/`](./APP/vision/)**: Vision microservice (Port 8001) with PyTorch DeepLabV3+ semantic segmentation, tilt-compensated plate rim metrology, multi-key Google Gemini router, and volume-to-gram estimation.
+* **[`APP/tests/`](./APP/tests/)**: Automated test suite for accuracy guardrails, endpoints, and failover router.
+* **[`APP/app.py`](./APP/app.py)**: Main application entry point.
+* **[`APP/start_services.ps1`](./APP/start_services.ps1)** & **[`APP/run_app.bat`](./APP/run_app.bat)**: Automated service launchers.
+* **[`APP/supabase_schema.sql`](./APP/supabase_schema.sql)**: Database migrations and schema for user profiles, meals, and diary logs.
 
-## 🏗️ Architecture & Processing Flow
-
-```
-                      [ User Photos: Top-Down + Side-View ]
-                                       │
-                                       ▼
-                     ┌───────────────────────────────────┐
-                     │   Vision Service (Port 8001)      │
-                     ├───────────────────────────────────┤
-                     │ 1. DeepLabV3+ MobileNetV2 (104cls)│
-                     │    Native 512px overlapping tiles │
-                     │ 2. Hough Circle Plate Calibration │
-                     │    Real-world cm-to-pixel ratio   │
-                     │ 3. Qwen3-VL:2B Multimodal VLM     │
-                     │    Visual component & fraction    │
-                     │ 4. Food Category Density & Volume │
-                     │    IIIT-H empirical gram bounds   │
-                     └─────────────────┬─────────────────┘
-                                       │
-                {"dish": "Mutton Curry", "ingredients": {"Rice": 190, "Mutton Curry": 140}}
-                                       │
-                                       ▼
-                     ┌───────────────────────────────────┐
-                     │  Nutrition Service (Port 8000)    │
-                     ├───────────────────────────────────┤
-                     │ 1. 3-Tier Preparation Resolution  │
-                     │    (e.g., Biryani vs Salad prep)  │
-                     │ 2. Char-wb TF-IDF (2-5) + 64D SVD │
-                     │ 3. 5× CatBoost Regressors:        │
-                     │    - energy_kcal                  │
-                     │    - carb_g                       │
-                     │    - protein_g                    │
-                     │    - fat_g                        │
-                     │    - fibre_g                      │
-                     │ 4. Weight Scaling & Aggregation   │
-                     └─────────────────┬─────────────────┘
-                                       │
-                                       ▼
-                     [ FrontEnd UI / Client Application ]
-```
-
----
-
-## 📂 Project Directory Structure
-
-```text
-NutraVision/
-├── FrontEnd/                # Web UI (HTML, CSS, JS, Assets)
-│   ├── index.html           # Dual-upload interface & nutrition dashboard
-│   ├── script.js            # Client-side API orchestrator (Ports 8001 & 8000)
-│   ├── style.css            # Responsive layout & styling
-│   └── images/              # Logo and sample test meal photos
-│
-├── vision/                  # Vision Microservice (Port 8001)
-│   ├── app.py               # FastAPI entry point & CORS configuration
-│   ├── segmentation.py      # DeepLabV3+ tiled inference & Hough plate scale
-│   ├── estimation.py        # Volume-to-gram density & IIIT-H weight bounds
-│   ├── vlm.py               # Ollama Qwen3-VL client & universal JSON parser
-│   ├── food_density.json    # Food category density mapping
-│   └── models/
-│       └── FoodSeg103/      # DeepLabV3+ MobileNetV2 weights (17.9 MB) & labels
-│
-├── ML/                      # Nutrition Regression Microservice (Port 8000)
-│   ├── app.py               # FastAPI router, integration endpoints & static UI
-│   ├── predictor.py         # Multi-target CatBoost prediction engine
-│   ├── preprocessor.py      # 3-tier preparation resolution & TF-IDF/SVD features
-│   ├── schemas.py           # Pydantic request/response schemas
-│   ├── *.cbm                # 5 trained CatBoost regression models
-│   └── *.joblib             # TF-IDF, SVD, and keyword feature artifacts
-│
-├── train/                   # Dataset generation & model training scripts
-│   ├── generate_indian_dataset.py  # IIIT-H & ICMR-NIN dataset builder
-│   ├── train_catboost.py           # CatBoost 5-target training pipeline
-│   └── data/                       # Enriched training CSVs
-│
-├── tests/                   # Automated end-to-end test suite
-│   ├── test_suite.py        # 8-step full system validation
-│   ├── test_indian_foods.py # Indian dish macro prediction benchmarks
-│   └── test_nutrition_api.py# API regression tests
-│
-├── scripts/                 # Utility scripts
-│   ├── pipeline.py          # Command-line dual-view meal inference runner
-│   └── evaluate_weights.py  # Portion weight accuracy evaluator
-│
-├── requirements.txt         # Single unified project dependencies
-├── start_services.ps1       # Single-command background launcher for both services
-└── README.md                # Project documentation
-```
-
----
-
-## 🚀 Quickstart Guide
-
-### 1. Prerequisites
-- **Python 3.10 or 3.11** (64-bit)
-- **Ollama** installed on your system with `qwen3-vl:2b`:
-  ```powershell
-  ollama pull qwen3-vl:2b
-  ```
-
-### 2. Environment Setup
-Install the unified dependencies from the project root:
+To start the application:
 ```powershell
-py -3.11 -m venv .venv_run
-.\.venv_run\Scripts\python.exe -m pip install --upgrade pip
-.\.venv_run\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### 3. Launching Services
-Run the automated launcher from PowerShell:
-```powershell
+cd APP
 .\start_services.ps1
 ```
-This script validates Ollama, initializes both microservices, and opens the frontend UI:
-* **Frontend UI & Nutrition Service:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
-* **Vision Service:** [http://127.0.0.1:8001](http://127.0.0.1:8001)
-* **API Documentation (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) and [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+Or simply double-click `run_app.bat`.
 
 ---
 
-## 🍛 IIIT Hyderabad Dataset Integration
-
-NutraVision integrates empirical data from **CVIT IIIT Hyderabad (ICVGIP 2025 Indian Thali Dataset)** and **ICMR-NIN (National Institute of Nutrition)**:
-
-1. **Physical Portion Bounds:** Over 3,278 physically weighed Indian servings constrain computer-vision volume estimation:
-   * Flatbreads (*Phulka / Roti*): bounded to $30\text{--}80\text{ g}$ (preventing 200g loaf hallucinations).
-   * *Papad*: bounded to $\le 25\text{ g}$.
-   * *Chutneys & Pickles*: bounded to $\le 45\text{ g}$.
-2. **Context-Aware Preparation (3-Tier Resolution):**
-   * *Explicit:* `"grilled chicken"` $\to$ grilled.
-   * *Contextual:* Rice inside a `"Biryani"` $\to$ boiled with ghee/spices; veggies in a `"Salad"` $\to$ raw.
-   * *Smart Default:* Inherent food physical state.
-
----
-
-## 🧪 Running the Test Suite
-
-Validate all endpoints, models, CORS preflight, and dual-image inference:
-```powershell
-.\.venv_run\Scripts\python.exe tests/test_suite.py
-```
-
-Run Indian food macro accuracy benchmarks:
-```powershell
-.\.venv_run\Scripts\python.exe tests/test_indian_foods.py
-```
-
----
-
-## 🛡️ License
-Academic and research use under MIT License. Models and datasets subject to respective upstream licenses (FoodSeg103, IIIT-H CVIT, ICMR-NIN).
+### 📚 [`REF/`](./REF) — Reference Materials & Research
+Contains background research, pitch materials, design assets, and legacy experiments:
+* **[`REF/BasePaper.pdf`](./REF/BasePaper.pdf)**: Base academic research paper.
+* **[`REF/OtherDocs/`](./REF/OtherDocs/)**: Final year engineering project presentation slides, pitch deck, model papers, and LoRA weights.
+* **[`REF/uiRedesign/`](./REF/uiRedesign/)**: UI design mockups, visual direction guides, and screenshot reference contact sheets.
+* **[`REF/Temp/`](./REF/Temp/)**: Legacy dataset builders, training scripts, ablation studies, and evaluation experiments.
+* **[`REF/scratch/`](./REF/scratch/)**: Scratch agent exploration scripts.
+* **[`REF/logs/`](./REF/logs/)**: Archival server run logs.
+* **[`REF/skills/`](./REF/skills/)**: Auxiliary agent skill definitions.

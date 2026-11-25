@@ -1,2 +1,3 @@
 @echo off
-call "%~dp0run_app.bat"
+cd /d "%~dp0APP"
+call "%~dp0APP\start.bat"
