@@ -445,9 +445,12 @@
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const isRemote = Boolean(DL_REMOTE_URL && ML_REMOTE_URL);
+            const timeoutMs = isRemote ? 90000 : 3500;
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-            if (DL_REMOTE_URL && ML_REMOTE_URL) {
+            if (isRemote) {
+                if (pillText) pillText.textContent = "Waking AI...";
                 const [dlResp, mlResp] = await Promise.all([
                     fetch(`${DL_REMOTE_URL}/health`, { method: 'GET', signal: controller.signal }),
                     fetch(`${ML_REMOTE_URL}/health`, { method: 'GET', signal: controller.signal })
